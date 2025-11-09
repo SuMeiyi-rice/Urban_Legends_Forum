@@ -85,21 +85,23 @@ python app.py
 
 ```
 FinalCode/
-├── app.py                      # Flask主程序
-├── ai_engine.py                # AI生成核心逻辑
-├── scheduler_tasks.py          # 定时任务（6分钟发帖）
-├── models.py                   # 数据库模型
-├── .env                        # 环境配置
-├── requirements.txt            # Python依赖
-├── test_evidence.py            # 证据生成测试 🆕
-├── EVIDENCE_SYSTEM.md          # 详细技术文档 🆕
-├── static/
-│   ├── style_crt.css           # CRT终端样式 (602行)
-│   ├── app.js                  # 前端交互
-│   └── generated/              # 生成的证据文件
-│       ├── evidence_*.png      # AI生成的"现场照片"
-│       └── audio_*.mp3         # AI生成的"诡异录音"
-└── index.html                  # 主页面
+├── app.py                      # Flask主程序（17KB）
+├── ai_engine.py                # AI生成核心逻辑（32KB）
+├── scheduler_tasks.py          # 定时任务（每6分钟自动发帖）
+├── story_engine.py             # 故事状态管理引擎
+├── index.html                  # 主页面（内联Mac OS 3暗色CSS）
+├── .env                        # 环境配置（本地LM Studio）
+├── .env.example                # 环境配置示例
+├── requirements.txt            # Python依赖列表
+├── README.md                   # 项目文档
+├── .gitignore                  # Git忽略规则
+├── instance/
+│   └── ai_urban_legends.db     # SQLite数据库
+└── static/
+    ├── app.js                  # 前端JavaScript（Mac OS 3风格）
+    └── generated/              # AI生成的证据文件
+        ├── evidence_*.png      # Stable Diffusion生成的"现场照片"
+        └── audio_*.wav         # Scipy合成的"诡异环境音"
 ```
 
 ---
