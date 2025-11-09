@@ -1,676 +1,401 @@
+// ============================================
+// 都市传说档案馆 - 前端应用
+// Mac OS 3 暗色系风格
+// ============================================
+
 const API_BASE = '/api';
 let currentUser = null;
-let authToken = null;
+let token = localStorage.getItem('token');
+let allStories = [];
+let currentCategory = 'all';
 
-// Initialize app
 document.addEventListener('DOMContentLoaded', () => {
-    checkAuth();
+    console.log('✨ 都市传说档案馆已加载');
+    if (token) verifyToken();
     loadStories();
-    loadArchives(); // Load archives on startup
-    setupEventListeners();
+    bindEvents();
+    updateClock();
+    setInterval(updateClock, 1000);
 });
 
-function setupEventListeners() {
-    document.getElementById('login-btn').addEventListener('click', () => showAuthModal('login'));
-    document.getElementById('register-btn').addEventListener('click', () => showAuthModal('register'));
-    document.getElementById('logout-btn').addEventListener('click', logout);
+function bindEvents() {
+    const loginBtn = document.getElementById('login-btn');
+    const registerBtn = document.getElementById('register-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const toggleAuthBtn = document.getElementById('toggle-auth');
+    const authForm = document.getElementById('auth-form');
     
-    // Close modals
-    document.querySelectorAll('.close').forEach(btn => {
-        btn.addEventListener('click', () => {
-            btn.closest('.modal').style.display = 'none';
+    if (loginBtn) loginBtn.addEventListener('click', showLoginForm);
+    if (registerBtn) registerBtn.addEventListener('click', showRegisterForm);
+    if (logoutBtn) logoutBtn.addEventListener('click', logout);
+    if (toggleAuthBtn) toggleAuthBtn.addEventListener('click', toggleAuthForm);
+    if (authForm) authForm.addEventListener('submit', handleAuthSubmit);
+    
+    document.querySelectorAll('.category-item').forEach(item => {
+        item.addEventListener('click', () => {
+            document.querySelectorAll('.category-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            currentCategory = item.dataset.category;
+            renderStories();
         });
     });
     
-    window.addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal')) {
-            e.target.style.display = 'none';
-        }
-    });
+    const authModal = document.getElementById('auth-modal');
+    const storyModal = document.getElementById('story-modal');
     
-    // Add event listener for notification bell
-    document.getElementById('notification-bell').addEventListener('click', toggleNotificationPanel);
+    if (authModal) {
+        authModal.addEventListener('click', (e) => {
+            if (e.target === authModal) closeAuthModal();
+        });
+    }
+    
+    if (storyModal) {
+        storyModal.addEventListener('click', (e) => {
+            if (e.target === storyModal) closeStoryModal();
+        });
+    }
 }
 
-function checkAuth() {
-    authToken = localStorage.getItem('authToken');
-    const userData = localStorage.getItem('userData');
+async function loadStories() {
+    try {
+        const response = await fetch(API_BASE + '/stories');
+        allStories = await response.json();
+        const countEl = document.getElementById('story-count');
+        if (countEl) countEl.textContent = allStories.length;
+        renderStories();
+    } catch (error) {
+        console.error('加载故事失败:', error);
+        showToast('加载故事失败', 'error');
+    }
+}
+
+function renderStories() {
+    const container = document.getElementById('stories-container');
+    if (!container) return;
     
-    if (authToken && userData) {
-        currentUser = JSON.parse(userData);
-        updateAuthUI();
+    const filtered = currentCategory === 'all' ? allStories : allStories.filter(s => s.category === currentCategory);
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="loading-text">暂无档案</div>';
+        return;
+    }
+    
+    container.innerHTML = filtered.map(story => {
+        return '<div class="story-item" onclick="showStoryDetail(' + story.id + ')">' +
+            '<div class="story-title">👻 ' + escapeHtml(story.title) + '</div>' +
+            '<div class="story-meta">' +
+            '<span>👁️ ' + story.views + '</span>' +
+            '<span>💬 ' + story.comments_count + '</span>' +
+            '<span>📸 ' + story.evidence_count + '</span>' +
+            '</div>' +
+            '<div class="story-preview">' + escapeHtml(story.content.substring(0, 80)) + '</div>' +
+            '<div class="story-footer">' +
+            '<span>' + (story.ai_persona || '🤖 AI') + '</span>' +
+            '<span>' + formatDate(story.created_at) + '</span>' +
+            '</div>' +
+            '</div>';
+    }).join('');
+}
+
+async function showStoryDetail(storyId) {
+    try {
+        const response = await fetch(API_BASE + '/stories/' + storyId);
+        const story = await response.json();
+        
+        const titleEl = document.getElementById('story-title');
+        if (titleEl) titleEl.textContent = story.title;
+        
+        let html = '<div style="border-bottom: 2px dashed #6b0080; padding-bottom: 10px; margin-bottom: 10px;">' +
+            '<div style="font-weight: bold; color: #6b0080;">作者: ' + (story.ai_persona || 'AI楼主') + ' 👻</div>' +
+            '<div style="font-size: 10px; color: #666; margin: 5px 0;">' + formatDate(story.created_at) + ' | 浏览: ' + story.views + '</div>' +
+            '<div style="white-space: pre-wrap; line-height: 1.6; word-break: break-all; font-size: 11px;">' + escapeHtml(story.content) + '</div>' +
+            '</div>';
+        
+        if (story.evidence && story.evidence.length > 0) {
+            html += '<div class="evidence-section"><div class="evidence-title">📸 证据</div><div class="evidence-grid">';
+            story.evidence.forEach(e => {
+                html += '<div class="evidence-item">';
+                if (e.type === 'image') {
+                    html += '<img src="' + e.file_path + '" style="width:100%; max-height:100px; border: 1px solid #666;">';
+                } else {
+                    html += '<audio controls style="width:100%; height:30px;"><source src="' + e.file_path + '"></audio>';
+                }
+                html += '<div class="evidence-desc">' + escapeHtml(e.description) + '</div></div>';
+            });
+            html += '</div></div>';
+        }
+        
+        html += '<div class="comment-section"><h3 style="color: #6b0080; border-bottom: 2px dashed #6b0080; padding-bottom: 8px;">💬 评论</h3>';
+        
+        if (story.comments && story.comments.length > 0) {
+            story.comments.forEach(c => {
+                html += '<div class="comment-item">' +
+                    '<div class="comment-author">' + escapeHtml(c.author.username) + ' ' + c.author.avatar + '</div>' +
+                    '<div class="comment-text">' + escapeHtml(c.content) + '</div>' +
+                    '<div class="comment-time">' + formatDate(c.created_at) + '</div>' +
+                    '</div>';
+            });
+        }
+        
+        if (currentUser) {
+            html += '<div style="margin-top: 12px; padding-top: 12px; border-top: 1px dotted #999;">' +
+                '<form onsubmit="submitComment(event, ' + storyId + ')">' +
+                '<textarea id="comment-text" placeholder="你的看法..." style="width:100%; height:60px; padding:8px; border:2px inset #999; font-size:11px; resize:none; font-family: MS Sans Serif, Arial;"></textarea>' +
+                '<button type="submit" class="macos3-button" style="margin-top:8px; width:100%;">发 表</button>' +
+                '</form></div>';
+        } else {
+            html += '<p style="text-align:center; color:#666; margin-top:12px;"><a href="#" onclick="showLoginForm(); return false;" style="color:#6b0080;">登录</a> 后发表评论</p>';
+        }
+        
+        html += '</div>';
+        const contentEl = document.getElementById('story-content');
+        if (contentEl) contentEl.innerHTML = html;
+        
+        const storyModal = document.getElementById('story-modal');
+        if (storyModal) storyModal.style.display = 'flex';
+    } catch (error) {
+        console.error('加载故事详情失败:', error);
+        showToast('加载失败', 'error');
+    }
+}
+
+async function submitComment(event, storyId) {
+    event.preventDefault();
+    if (!currentUser) {
+        showToast('请先登录', 'warning');
+        return;
+    }
+    
+    const commentText = document.getElementById('comment-text');
+    const content = commentText ? commentText.value.trim() : '';
+    
+    if (!content) {
+        showToast('不能为空', 'warning');
+        return;
+    }
+    
+    try {
+        const res = await fetch(API_BASE + '/stories/' + storyId + '/comments', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ content: content })
+        });
+        
+        if (res.ok) {
+            showToast('已发表', 'success');
+            setTimeout(() => showStoryDetail(storyId), 1500);
+        } else {
+            const err = await res.json();
+            showToast(err.error || '发表失败', 'error');
+        }
+    } catch (error) {
+        console.error('发表评论失败:', error);
+        showToast('错误', 'error');
+    }
+}
+
+function showLoginForm() {
+    const titleEl = document.getElementById('modal-title');
+    const emailGroup = document.getElementById('email-group');
+    const toggleBtn = document.getElementById('toggle-auth');
+    const authForm = document.getElementById('auth-form');
+    
+    if (titleEl) titleEl.textContent = '登 录';
+    if (emailGroup) emailGroup.style.display = 'none';
+    if (toggleBtn) toggleBtn.dataset.mode = 'register';
+    if (authForm) authForm.reset();
+    
+    const modal = document.getElementById('auth-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function showRegisterForm() {
+    const titleEl = document.getElementById('modal-title');
+    const emailGroup = document.getElementById('email-group');
+    const toggleBtn = document.getElementById('toggle-auth');
+    const authForm = document.getElementById('auth-form');
+    
+    if (titleEl) titleEl.textContent = '注 册';
+    if (emailGroup) emailGroup.style.display = 'block';
+    if (toggleBtn) toggleBtn.dataset.mode = 'login';
+    if (authForm) authForm.reset();
+    
+    const modal = document.getElementById('auth-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function toggleAuthForm() {
+    const toggleBtn = document.getElementById('toggle-auth');
+    if (!toggleBtn) return;
+    
+    if (toggleBtn.dataset.mode === 'register') {
+        showRegisterForm();
+    } else {
+        showLoginForm();
+    }
+}
+
+async function handleAuthSubmit(event) {
+    event.preventDefault();
+    
+    const usernameEl = document.getElementById('username');
+    const passwordEl = document.getElementById('password');
+    const emailEl = document.getElementById('email');
+    const emailGroup = document.getElementById('email-group');
+    
+    const username = usernameEl ? usernameEl.value.trim() : '';
+    const password = passwordEl ? passwordEl.value.trim() : '';
+    const isReg = emailGroup && emailGroup.style.display !== 'none';
+    
+    if (!username || !password) {
+        showToast('用户名和密码必填', 'warning');
+        return;
+    }
+    
+    const data = { username: username, password: password };
+    if (isReg) {
+        const email = emailEl ? emailEl.value.trim() : '';
+        if (!email) {
+            showToast('邮箱必填', 'warning');
+            return;
+        }
+        data.email = email;
+    }
+    
+    try {
+        const endpoint = isReg ? 'register' : 'login';
+        const res = await fetch(API_BASE + '/' + endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        if (res.ok) {
+            const result = await res.json();
+            token = result.token;
+            currentUser = result.user;
+            localStorage.setItem('token', token);
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            updateAuthUI();
+            closeAuthModal();
+            showToast((isReg ? '注册' : '登录') + '成功', 'success');
+        } else {
+            const err = await res.json();
+            showToast(err.error || '错误', 'error');
+        }
+    } catch (error) {
+        console.error('认证失败:', error);
+        showToast('错误', 'error');
     }
 }
 
 function updateAuthUI() {
-    const loginBtn = document.getElementById('login-btn');
-    const registerBtn = document.getElementById('register-btn');
-    const userInfo = document.getElementById('user-info');
+    const guestView = document.getElementById('guest-view');
+    const userView = document.getElementById('user-view');
     
     if (currentUser) {
-        loginBtn.style.display = 'none';
-        registerBtn.style.display = 'none';
-        userInfo.style.display = 'inline-flex';
-        document.getElementById('user-avatar').textContent = currentUser.avatar;
-        document.getElementById('username').textContent = currentUser.username;
-        document.getElementById('notification-bell').style.display = 'block';
-        loadNotifications();
+        if (guestView) guestView.style.display = 'none';
+        if (userView) userView.style.display = 'block';
+        
+        const avatarEl = document.getElementById('user-avatar');
+        const nameEl = document.getElementById('user-name');
+        
+        if (avatarEl) avatarEl.textContent = currentUser.avatar || '👻';
+        if (nameEl) nameEl.textContent = currentUser.username;
     } else {
-        loginBtn.style.display = 'inline-block';
-        registerBtn.style.display = 'inline-block';
-        userInfo.style.display = 'none';
-        document.getElementById('notification-bell').style.display = 'none';
-    }
-}
-
-async function loadNotifications() {
-    if (!authToken) return;
-
-    const panel = document.getElementById('notification-panel');
-    const countBadge = document.getElementById('notification-count');
-
-    try {
-        const response = await fetch(`${API_BASE}/notifications`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
-        });
-        const notifications = await response.json();
-
-        const unreadCount = notifications.filter(n => !n.is_read).length;
-        if (unreadCount > 0) {
-            countBadge.textContent = unreadCount;
-            countBadge.style.display = 'block';
-        } else {
-            countBadge.style.display = 'none';
-        }
-
-        if (notifications.length === 0) {
-            panel.innerHTML = '<div class="notification-item">没有新通知</div>';
-            return;
-        }
-
-        panel.innerHTML = notifications.map(n => `
-            <div class="notification-item ${!n.is_read ? 'unread' : ''}" data-notification-id="${n.id}" data-story-id="${n.story_id}">
-                <p>${n.content}</p>
-                <small>${new Date(n.created_at).toLocaleString('zh-CN')}</small>
-            </div>
-        `).join('');
-        
-        // Add event listeners to notification items
-        document.querySelectorAll('.notification-item').forEach(item => {
-            const notifId = item.dataset.notificationId;
-            const storyId = item.dataset.storyId;
-            if (notifId && storyId) {
-                item.addEventListener('click', function() {
-                    readNotification(parseInt(notifId), parseInt(storyId));
-                });
-            }
-        });
-
-    } catch (error) {
-        console.error('Error loading notifications:', error);
-    }
-}
-
-function toggleNotificationPanel() {
-    const panel = document.getElementById('notification-panel');
-    if (panel.style.display === 'block') {
-        panel.style.display = 'none';
-    } else {
-        panel.style.display = 'block';
-        loadNotifications();
-    }
-}
-
-async function readNotification(notificationId, storyId) {
-    await fetch(`${API_BASE}/notifications/read`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({ ids: [notificationId] })
-    });
-
-    document.getElementById('notification-panel').style.display = 'none';
-    viewStory(storyId);
-    loadNotifications();
-}
-
-function showAuthModal(mode) {
-    const modal = document.getElementById('auth-modal');
-    const formContainer = document.getElementById('auth-form');
-    
-    const isLogin = mode === 'login';
-    
-    formContainer.innerHTML = `
-        <h2>${isLogin ? '登录' : '注册'}</h2>
-        <div class="auth-form">
-            <input type="text" id="auth-username" placeholder="用户名" required>
-            ${!isLogin ? '<input type="email" id="auth-email" placeholder="邮箱" required>' : ''}
-            <input type="password" id="auth-password" placeholder="密码" required>
-            <button id="auth-submit-btn" data-mode="${isLogin ? 'login' : 'register'}">
-                ${isLogin ? '登录' : '注册'}
-            </button>
-        </div>
-    `;
-    
-    // Add event listener for the auth button
-    const authBtn = formContainer.querySelector('#auth-submit-btn');
-    authBtn.addEventListener('click', function() {
-        if (isLogin) {
-            login();
-        } else {
-            register();
-        }
-    });
-    
-    modal.style.display = 'block';
-}
-
-async function login() {
-    const username = document.getElementById('auth-username').value;
-    const password = document.getElementById('auth-password').value;
-    
-    try {
-        const response = await fetch(`${API_BASE}/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            authToken = data.token;
-            currentUser = data.user;
-            localStorage.setItem('authToken', authToken);
-            localStorage.setItem('userData', JSON.stringify(currentUser));
-            updateAuthUI();
-            document.getElementById('auth-modal').style.display = 'none';
-            loadStories();
-            loadArchives();
-        } else {
-            alert('登录失败：用户名或密码错误');
-        }
-    } catch (error) {
-        console.error('Login error:', error);
-        alert('登录失败，请重试');
-    }
-}
-
-async function register() {
-    const username = document.getElementById('auth-username').value;
-    const email = document.getElementById('auth-email').value;
-    const password = document.getElementById('auth-password').value;
-    
-    try {
-        const response = await fetch(`${API_BASE}/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, email, password })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            authToken = data.token;
-            currentUser = data.user;
-            localStorage.setItem('authToken', authToken);
-            localStorage.setItem('userData', JSON.stringify(currentUser));
-            updateAuthUI();
-            document.getElementById('auth-modal').style.display = 'none';
-            loadStories();
-            loadArchives();
-        } else {
-            alert('注册失败：用户名可能已存在');
-        }
-    } catch (error) {
-        console.error('Register error:', error);
-        alert('注册失败，请重试');
+        if (guestView) guestView.style.display = 'block';
+        if (userView) userView.style.display = 'none';
     }
 }
 
 function logout() {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('userData');
-    authToken = null;
     currentUser = null;
+    token = null;
+    localStorage.removeItem('token');
+    localStorage.removeItem('currentUser');
     updateAuthUI();
-    loadStories();
-    loadArchives();
+    showToast('已登出', 'success');
 }
 
-async function loadStories() {
-    const grid = document.getElementById('story-grid');
-    grid.innerHTML = '<div class="loading">正在加载恐怖档案...</div>';
+async function verifyToken() {
+    if (!token) return;
     
     try {
-        const response = await fetch(`${API_BASE}/stories`);
-        const stories = await response.json();
-        
-        const activeStories = stories.filter(s => s.current_state !== 'ended' && s.current_state !== 'ending_mystery' && s.current_state !== 'ending_horror' && s.current_state !== 'ending_ambiguous');
-
-        if (activeStories.length === 0) {
-            grid.innerHTML = '<div class="loading">暂无活跃故事... AI正在创作中...</div>';
-            return;
-        }
-        
-        grid.innerHTML = activeStories.map(story => `
-            <div class="story-card" data-story-id="${story.id}">
-                <div class="story-header">
-                    <span class="ai-persona">${story.ai_persona || '📝 匿名'}</span>
-                    <span class="story-state">${getStateDisplay(story.current_state)}</span>
-                </div>
-                <div class="story-title">${story.title}</div>
-                <div class="story-content">${story.content}</div>
-                <div class="story-meta">
-                    <span>📍 ${story.location || '未知地点'}</span>
-                    <span>👁️ ${story.views} | 💬 ${story.comments_count} | 📎 ${story.evidence_count}</span>
-                </div>
-            </div>
-        `).join('');
-        
-        // Add event listeners to all story cards
-        document.querySelectorAll('.story-card').forEach(card => {
-            card.addEventListener('click', function() {
-                const storyId = parseInt(this.dataset.storyId);
-                viewStory(storyId);
-            });
+        const res = await fetch(API_BASE + '/notifications', {
+            headers: { 'Authorization': 'Bearer ' + token }
         });
         
-    } catch (error) {
-        console.error('Error loading stories:', error);
-        grid.innerHTML = '<div class="loading">加载失败，请刷新页面</div>';
-    }
-}
-
-function getStateDisplay(state) {
-    const stateMap = {
-        'init': '初现',
-        'unfolding': '展开',
-        'investigation': '调查中',
-        'escalation': '升级',
-        'danger': '危险',
-        'revelation': '真相',
-        'twist': '反转',
-        'climax': '高潮',
-        'ending_horror': '恐怖结局',
-        'ending_mystery': '悬疑结局',
-        'ending_ambiguous': '未知结局',
-        'ended': '已完结'
-    };
-    return stateMap[state] || state;
-}
-
-async function viewStory(storyId) {
-    const modal = document.getElementById('story-modal');
-    const detailContainer = document.getElementById('story-detail');
-    
-    detailContainer.innerHTML = '<div class="loading">加载中...</div>';
-    modal.style.display = 'block';
-    
-    console.log('Opening story:', storyId);
-    console.log('Current user:', currentUser);
-    console.log('Auth token:', authToken ? 'exists' : 'missing');
-    
-    try {
-        const response = await fetch(`${API_BASE}/stories/${storyId}`);
-        const story = await response.json();
-        
-        // Check follow status
-        let followStatus = { followed: false };
-        if (authToken) {
-            const followCheckResponse = await fetch(`${API_BASE}/stories/${storyId}/follow`, { method: 'GET', headers: { 'Authorization': `Bearer ${authToken}` } });
-            if(followCheckResponse.ok) followStatus = await followCheckResponse.json();
-        }
-        
-        console.log('Follow status:', followStatus);
-
-        // Always show button, just disable if not logged in
-        const followButtonHtml = authToken 
-            ? `<button class="follow-btn ${followStatus.followed ? 'followed' : ''}" data-story-id="${story.id}">${followStatus.followed ? '✓ 已关注' : '+ 关注'}</button>`
-            : `<button class="follow-btn" disabled style="opacity: 0.5; cursor: not-allowed;">登录后关注</button>`;
-        
-        // Debug info
-        const debugInfo = `<div style="background: yellow; color: black; padding: 10px; margin-bottom: 10px;">
-            调试信息: authToken=${authToken ? 'YES' : 'NO'}, currentUser=${currentUser ? currentUser.username : 'NO'}, followed=${followStatus.followed}
-        </div>`;
-        
-        detailContainer.innerHTML = debugInfo + `
-            <div class="story-header">
-                <div class="story-header-left">
-                    <span class="ai-persona">${story.ai_persona || '📝 匿名'}</span>
-                    <span class="story-state">${getStateDisplay(story.current_state)}</span>
-                </div>
-                ${followButtonHtml}
-            </div>
-            
-            <h2 class="story-title">${story.title}</h2>
-            
-            <div class="story-meta">
-                <span>📍 ${story.location || '未知地点'}</span>
-                <span>📅 ${new Date(story.created_at).toLocaleString('zh-CN')}</span>
-                <span>👁️ ${story.views} 次查看</span>
-            </div>
-            
-            <div class="story-content" style="margin-top: 30px; white-space: pre-wrap;">
-                ${story.content}
-            </div>
-            
-            ${story.evidence && story.evidence.length > 0 ? `
-                <div class="evidence-section">
-                    <h3 style="color: var(--blood-red); margin-bottom: 20px;">🔍 证据档案</h3>
-                    ${story.evidence.map(e => `
-                        <div class="evidence-item">
-                            ${e.type === 'image' ? `<img src="${e.file_path}" alt="Evidence">` : ''}
-                            ${e.type === 'audio' ? `<audio controls src="${e.file_path}" style="width: 100%;"></audio>` : ''}
-                            <p style="margin-top: 10px; font-size: 0.9em;">${e.description}</p>
-                            <small style="color: #666;">${new Date(e.created_at).toLocaleString('zh-CN')}</small>
-                        </div>
-                    `).join('')}
-                </div>
-            ` : ''}
-            
-            <div class="comments-section">
-                <h3 style="color: var(--blood-red); margin-bottom: 20px;">💬 讨论区</h3>
-                
-                ${currentUser ? `
-                    <div class="comment-form">
-                        <textarea id="comment-text" placeholder="发表你的看法...（AI会回复你）"></textarea>
-                        <button id="submit-comment-btn" data-story-id="${story.id}">提交评论</button>
-                    </div>
-                ` : '<p style="color: #666;">请先登录后参与讨论</p>'}
-                
-                <div id="comments-list">
-                    ${story.comments && story.comments.length > 0 ? 
-                        story.comments.map(c => `
-                            <div class="comment ${c.is_ai_response ? 'ai-response' : ''}">
-                                <div class="comment-author ${c.is_ai_response ? 'ai' : ''}">
-                                    ${c.author.avatar} ${c.author.username}
-                                    ${c.is_ai_response ? ' [AI回复]' : ''}
-                                </div>
-                                <div>${c.content}</div>
-                                <small style="color: #666;">${new Date(c.created_at).toLocaleString('zh-CN')}</small>
-                            </div>
-                        `).join('') 
-                        : '<p style="color: #666; margin-top: 20px;">还没有评论...</p>'
-                    }
-                </div>
-            </div>
-        `;
-        
-        // Add event listeners after content is loaded
-        const followBtn = detailContainer.querySelector('.follow-btn');
-        console.log('Follow button found:', followBtn);
-        if (followBtn && !followBtn.disabled) {
-            followBtn.addEventListener('click', function() {
-                console.log('Follow button clicked!');
-                followStory(story.id, this);
-            });
-        }
-        
-        const submitBtn = detailContainer.querySelector('#submit-comment-btn');
-        if (submitBtn) {
-            submitBtn.addEventListener('click', function() {
-                submitComment(story.id);
-            });
-        }
-        
-    } catch (error) {
-        console.error('Error loading story:', error);
-        detailContainer.innerHTML = '<div class="loading">加载失败</div>';
-    }
-    
-    // Highlight active archive item
-    document.querySelectorAll('.archive-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    const activeArchiveItems = document.querySelectorAll('.archive-item');
-    activeArchiveItems.forEach(item => {
-        if (item.dataset.storyId == storyId) {
-            item.classList.add('active');
-        }
-    });
-}
-
-async function submitComment(storyId) {
-    if (!authToken) {
-        alert('请先登录');
-        return;
-    }
-    
-    const textarea = document.getElementById('comment-text');
-    const content = textarea.value.trim();
-    
-    if (!content) {
-        alert('请输入评论内容');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_BASE}/stories/${storyId}/comments`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
-            body: JSON.stringify({ content })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            textarea.value = '';
-            // Show pending message
-            if (data.ai_response_pending) {
-                showToast('✅ 评论已发布', 'AI楼主正在思考回复中，请稍候...', storyId);
+        if (res.ok) {
+            const userStr = localStorage.getItem('currentUser');
+            if (userStr) {
+                currentUser = JSON.parse(userStr);
+                updateAuthUI();
             }
-            // Reload story to show new comment
-            setTimeout(() => viewStory(storyId), 1000);
         } else {
-            alert('评论失败，请重试');
+            localStorage.removeItem('token');
+            token = null;
         }
     } catch (error) {
-        console.error('Error submitting comment:', error);
-        alert('评论失败，请重试');
+        console.error('验证失败:', error);
     }
 }
 
-async function loadArchives() {
-    const archiveList = document.getElementById('archive-list');
-    try {
-        const response = await fetch(`${API_BASE}/stories`);
-        const stories = await response.json();
-        
-        archiveList.innerHTML = stories.map(story => `
-            <div class="archive-item" data-story-id="${story.id}">
-                <div class="archive-title">${story.title}</div>
-                <div class="archive-status ${story.current_state}">${getStateDisplay(story.current_state)}</div>
-            </div>
-        `).join('');
-        
-        // Add event listeners to all archive items
-        document.querySelectorAll('.archive-item').forEach(item => {
-            item.addEventListener('click', function() {
-                const storyId = parseInt(this.dataset.storyId);
-                viewStory(storyId);
-            });
-        });
-        
-    } catch (error) {
-        console.error('Error loading archives:', error);
-        archiveList.innerHTML = '<p>档案加载失败</p>';
-    }
+function closeAuthModal() {
+    const modal = document.getElementById('auth-modal');
+    if (modal) modal.style.display = 'none';
 }
 
-// Modify viewStory to highlight active archive
-async function viewStory(storyId) {
+function closeStoryModal() {
     const modal = document.getElementById('story-modal');
-    const detailContainer = document.getElementById('story-detail');
-    
-    detailContainer.innerHTML = '<div class="loading">加载中...</div>';
-    modal.style.display = 'block';
-    
-    try {
-        const response = await fetch(`${API_BASE}/stories/${storyId}`);
-        const story = await response.json();
-        
-        detailContainer.innerHTML = `
-            <div class="story-header">
-                <span class="ai-persona">${story.ai_persona || '📝 匿名'}</span>
-                <span class="story-state">${getStateDisplay(story.current_state)}</span>
-            </div>
-            
-            <h2 class="story-title">${story.title}</h2>
-            
-            <div class="story-meta">
-                <span>📍 ${story.location || '未知地点'}</span>
-                <span>📅 ${new Date(story.created_at).toLocaleString('zh-CN')}</span>
-                <span>👁️ ${story.views} 次查看</span>
-            </div>
-            
-            <div class="story-content" style="margin-top: 30px; white-space: pre-wrap;">
-                ${story.content}
-            </div>
-            
-            ${story.evidence && story.evidence.length > 0 ? `
-                <div class="evidence-section">
-                    <h3 style="color: var(--blood-red); margin-bottom: 20px;">🔍 证据档案</h3>
-                    ${story.evidence.map(e => `
-                        <div class="evidence-item">
-                            ${e.type === 'image' ? `<img src="${e.file_path}" alt="Evidence">` : ''}
-                            ${e.type === 'audio' ? `<audio controls src="${e.file_path}" style="width: 100%;"></audio>` : ''}
-                            <p style="margin-top: 10px; font-size: 0.9em;">${e.description}</p>
-                            <small style="color: #666;">${new Date(e.created_at).toLocaleString('zh-CN')}</small>
-                        </div>
-                    `).join('')}
-                </div>
-            ` : ''}
-            
-            <div class="comments-section">
-                <h3 style="color: var(--blood-red); margin-bottom: 20px;">💬 讨论区</h3>
-                
-                ${currentUser ? `
-                    <div class="comment-form">
-                        <textarea id="comment-text" placeholder="发表你的看法...（AI会回复你）"></textarea>
-                        <button onclick="submitComment(${story.id})">提交评论</button>
-                    </div>
-                ` : '<p style="color: #666;">请先登录后参与讨论</p>'}
-                
-                <div id="comments-list">
-                    ${story.comments && story.comments.length > 0 ? 
-                        story.comments.map(c => `
-                            <div class="comment ${c.is_ai_response ? 'ai-response' : ''}">
-                                <div class="comment-author ${c.is_ai_response ? 'ai' : ''}">
-                                    ${c.author.avatar} ${c.author.username}
-                                    ${c.is_ai_response ? ' [AI回复]' : ''}
-                                </div>
-                                <div>${c.content}</div>
-                                <small style="color: #666;">${new Date(c.created_at).toLocaleString('zh-CN')}</small>
-                            </div>
-                        `).join('') 
-                        : '<p style="color: #666; margin-top: 20px;">还没有评论...</p>'
-                    }
-                </div>
-            </div>
-        `;
-    } catch (error) {
-        console.error('Error loading story:', error);
-        detailContainer.innerHTML = '<div class="loading">加载失败</div>';
-    }
-    
-    // Highlight active archive item
-    document.querySelectorAll('.archive-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    const activeArchiveItem = document.querySelector(`.archive-item[onclick="viewStory(${storyId})"]`);
-    if (activeArchiveItem) {
-        activeArchiveItem.classList.add('active');
-    }
+    if (modal) modal.style.display = 'none';
 }
 
-//关注功能
-async function followStory(storyId, btn) {
-    if (!authToken) {
-        alert('请先登录');
-        return;
-    }
-    try {
-        const response = await fetch(`${API_BASE}/stories/${storyId}/follow`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}` }
-        });
-        const data = await response.json();
-        if (data.status === 'followed') {
-            btn.textContent = '已关注';
-            btn.classList.add('followed');
-        } else {
-            btn.textContent = '关注';
-            btn.classList.remove('followed');
-        }
-    } catch (error) {
-        console.error('Follow error:', error);
-    }
+function formatDate(d) {
+    return new Date(d).toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
 }
 
-// Auto-refresh stories and archives every 5 minutes
-setInterval(() => {
-    loadStories();
-    loadArchives();
-}, 5 * 60 * 1000);
+function escapeHtml(t) {
+    const div = document.createElement('div');
+    div.textContent = t;
+    return div.innerHTML;
+}
 
-// Track last notification check
-let lastNotificationCount = 0;
-
-// Show toast notification
-function showToast(title, content, storyId) {
-    const toast = document.getElementById('toast-notification');
-    toast.innerHTML = `
-        <div class="toast-title">${title}</div>
-        <div class="toast-content">${content}</div>
-    `;
-    toast.classList.add('show');
+function showToast(msg, type) {
+    type = type || 'info';
+    const id = 'toast-' + Date.now();
     
-    // Remove any existing click listeners
-    const newToast = toast.cloneNode(true);
-    toast.parentNode.replaceChild(newToast, toast);
+    const bgMap = {
+        'success': 'linear-gradient(180deg, #66cc66, #44aa44)',
+        'error': 'linear-gradient(180deg, #ff6666, #cc3333)',
+        'warning': 'linear-gradient(180deg, #ffcc66, #ff9933)',
+        'info': 'linear-gradient(180deg, #6699ff, #3366ff)'
+    };
     
-    // Add click event listener
-    newToast.addEventListener('click', function() {
-        viewStory(storyId);
-        newToast.classList.remove('show');
-    });
+    const bg = bgMap[type] || bgMap['info'];
     
-    // Auto hide after 5 seconds
+    document.body.insertAdjacentHTML('beforeend',
+        '<div id="' + id + '" style="position: fixed; top: 20px; right: 20px; background: ' + bg + '; color: white; padding: 10px 14px; border: 2px outset #999; font-size: 11px; z-index: 2000; box-shadow: 2px 2px 6px rgba(0,0,0,0.3); border-radius: 2px;">' +
+        escapeHtml(msg) +
+        '</div>'
+    );
+    
     setTimeout(() => {
-        newToast.classList.remove('show');
-    }, 5000);
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    }, 3000);
 }
 
-// Check for new notifications (more frequently)
-async function checkNewNotifications() {
-    if (!authToken) return;
-    
-    try {
-        const response = await fetch(`${API_BASE}/notifications`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
-        });
-        const notifications = await response.json();
-        
-        const unreadNotifications = notifications.filter(n => !n.is_read);
-        
-        // If we have new unread notifications
-        if (unreadNotifications.length > lastNotificationCount) {
-            const newNotification = unreadNotifications[0];
-            showToast('🔔 新消息', newNotification.content, newNotification.story_id);
-            loadNotifications(); // Update notification bell
-        }
-        
-        lastNotificationCount = unreadNotifications.length;
-    } catch (error) {
-        console.error('Error checking notifications:', error);
-    }
+function updateClock() {
+    const now = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    const items = document.querySelectorAll('.menu-item');
+    if (items.length > 0) items[0].textContent = now;
 }
-
-// Auto-refresh notifications every minute
-setInterval(loadNotifications, 1 * 60 * 1000);
-
-// Check for new notifications every 10 seconds
-setInterval(checkNewNotifications, 10 * 1000);

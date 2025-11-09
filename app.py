@@ -100,10 +100,14 @@ def verify_token(token):
 
 @app.route('/')
 def index():
-    return send_from_directory('static', 'index.html')
+    return send_from_directory('.', 'index.html')
+
+@app.route('/static/<path:path>')
+def serve_static(path):
+    return send_from_directory('static', path)
 
 @app.route('/<path:path>')
-def serve_static(path):
+def serve_other(path):
     return send_from_directory('static', path)
 
 @app.route('/api/register', methods=['POST'])
@@ -240,6 +244,18 @@ def add_comment(story_id):
         daemon=True
     ).start()
     
+    # 检查是否达到证据生成阈值
+    comment_count = len(story.comments)
+    evidence_threshold = int(os.getenv('EVIDENCE_COMMENT_THRESHOLD', 2))
+    
+    if comment_count >= evidence_threshold and len(story.evidence) == 0:
+        print(f"[add_comment] 评论数达到阈值 ({comment_count}>={evidence_threshold})，启动证据生成...")
+        threading.Thread(
+            target=generate_evidence_for_story,
+            args=(story_id,),
+            daemon=True
+        ).start()
+    
     return jsonify({
         'comment': {
             'id': comment.id,
@@ -374,6 +390,78 @@ def delayed_ai_response(story_id, comment_id, delay_seconds=60):
             create_notifications_for_followers(story, ai_comment, ai_response=True)
             
             db.session.commit()
+
+def generate_evidence_for_story(story_id):
+    """为故事生成证据（图片和音频）"""
+    print(f"[generate_evidence_for_story] 开始为故事 ID={story_id} 生成证据...")
+    
+    with app.app_context():
+        story = Story.query.get(story_id)
+        if not story:
+            print(f"[generate_evidence_for_story] ERROR: Story not found!")
+            return
+        
+        from ai_engine import generate_evidence_image, generate_evidence_audio
+        
+        # 收集评论内容作为上下文
+        comment_texts = [c.content for c in story.comments if not c.is_ai_response]
+        comment_context = " ".join(comment_texts[:3])  # 使用前3条评论
+        
+        # 生成1-2张图片证据
+        image_count = 2
+        for i in range(image_count):
+            print(f"[generate_evidence_for_story] 生成图片证据 {i+1}/{image_count}...")
+            image_path = generate_evidence_image(
+                story.title,
+                story.content,
+                comment_context
+            )
+            
+            if image_path:
+                evidence = Evidence(
+                    story_id=story_id,
+                    evidence_type='image',
+                    file_path=image_path,
+                    description=f"现场拍摄 #{i+1} - 基于网友反馈补充"
+                )
+                db.session.add(evidence)
+                print(f"[generate_evidence_for_story] ✅ 图片证据 {i+1} 已生成: {image_path}")
+        
+        # 生成1个音频证据
+        print(f"[generate_evidence_for_story] 生成音频证据...")
+        audio_path = generate_evidence_audio(
+            f"{story.title}\n{story.content[:200]}"
+        )
+        
+        if audio_path:
+            evidence = Evidence(
+                story_id=story_id,
+                evidence_type='audio',
+                file_path=audio_path,
+                description="现场录音 - 诡异环境音"
+            )
+            db.session.add(evidence)
+            print(f"[generate_evidence_for_story] ✅ 音频证据已生成: {audio_path}")
+        
+        # 更新故事内容，添加证据说明
+        story.content += "\n\n【证据更新】\n根据大家的反馈，我回到现场又拍了几张照片，还录了音。你们自己看吧...我现在真的很害怕。"
+        story.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        # 通知所有关注者
+        followers = Follow.query.filter_by(story_id=story_id).all()
+        for follow in followers:
+            notification = Notification(
+                user_id=follow.user_id,
+                story_id=story_id,
+                notification_type='evidence_update',
+                content=f'你关注的故事 "{story.title}" 更新了新的证据！'
+            )
+            db.session.add(notification)
+        
+        db.session.commit()
+        print(f"[generate_evidence_for_story] ✅ 证据生成完成！")
 
 if __name__ == '__main__':
     # Start background scheduler for AI story generation

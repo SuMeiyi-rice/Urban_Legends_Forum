@@ -7,9 +7,12 @@ import requests
 from PIL import Image
 from io import BytesIO
 
-# Initialize AI clients
-openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-anthropic_client = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+# Initialize AI clients (only if API keys are provided)
+openai_api_key = os.getenv('OPENAI_API_KEY')
+anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
+
+openai_client = OpenAI(api_key=openai_api_key) if openai_api_key else None
+anthropic_client = Anthropic(api_key=anthropic_api_key) if anthropic_api_key else None
 
 # Horror story personas for AI
 AI_PERSONAS = [
@@ -234,63 +237,256 @@ def generate_ai_story():
         print(f"Error generating AI story: {e}")
         return None
 
-def generate_evidence_image(story_title, story_content):
-    """Generate horror-themed evidence image using DALL-E"""
+def generate_evidence_image(story_title, story_content, comment_context=""):
+    """Generate horror-themed evidence image using Stable Diffusion"""
     try:
-        # Create prompt for horror evidence
-        prompt = f"A creepy, dark, grainy photo that serves as evidence for this urban legend: {story_title}. Style: found footage, security camera, low quality, authentic looking, horror atmosphere, realistic"
+        import os
+        use_real_ai = os.getenv('USE_DIFFUSER_IMAGE', 'true').lower() == 'true'
         
-        response = openai_client.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
-            size="1024x1024",
-            quality="standard",
-            n=1
-        )
+        if use_real_ai:
+            print(f"[generate_evidence_image] 使用 Stable Diffusion 生成图片...")
+            
+            try:
+                from diffusers import StableDiffusionPipeline
+                import torch
+                from PIL import Image, ImageFilter, ImageEnhance
+                import random
+                
+                # 检查是否有可用的模型
+                model_id = os.getenv('DIFFUSION_MODEL', 'runwayml/stable-diffusion-v1-5')
+                
+                # 创建恐怖风格的提示词
+                horror_keywords = [
+                    "dark", "grainy", "blurry", "low quality", 
+                    "found footage", "security camera", "night vision",
+                    "creepy", "eerie", "disturbing", "ominous"
+                ]
+                
+                # 根据故事类别调整提示词
+                location_hint = story_title[:50] if story_title else "urban location"
+                
+                prompt = f"dark grainy security camera footage, low quality photograph, creepy atmosphere, horror evidence photo, {location_hint}, blurred motion, night time, eerie shadows, disturbing scene, found footage style"
+                
+                negative_prompt = "bright, colorful, high quality, clear, sharp, professional photography, daylight, happy, cartoon, anime"
+                
+                print(f"[generate_evidence_image] Prompt: {prompt[:100]}...")
+                
+                # 使用较小的图片尺寸加快生成
+                pipe = StableDiffusionPipeline.from_pretrained(
+                    model_id,
+                    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                    safety_checker=None,  # 禁用安全检查以允许恐怖内容
+                    requires_safety_checker=False
+                )
+                
+                # 如果有GPU则使用GPU
+                if torch.cuda.is_available():
+                    pipe = pipe.to("cuda")
+                    print("[generate_evidence_image] ✅ 使用GPU加速")
+                    num_steps = 20
+                    img_size = 512
+                else:
+                    print("[generate_evidence_image] ⚠️ 未检测到GPU，使用CPU生成（降低质量以加快速度）")
+                    # CPU模式：大幅降低质量以加快速度
+                    num_steps = 8  # 从20降到8步
+                    img_size = 256  # 从512降到256像素
+                
+                # 生成图片
+                image = pipe(
+                    prompt,
+                    negative_prompt=negative_prompt,
+                    num_inference_steps=num_steps,  # CPU: 8步, GPU: 20步
+                    guidance_scale=7.5,
+                    height=img_size,
+                    width=img_size
+                ).images[0]
+                
+                # 如果是256x256，放大到512x512（保持低质量感）
+                if img_size == 256:
+                    image = image.resize((512, 512), Image.Resampling.NEAREST)  # 使用NEAREST保持像素化效果
+                
+                # 后处理：添加噪点、降低质量、添加时间戳
+                # 1. 添加噪点
+                enhancer = ImageEnhance.Contrast(image)
+                image = enhancer.enhance(0.7)  # 降低对比度
+                
+                # 2. 模糊效果
+                image = image.filter(ImageFilter.GaussianBlur(radius=1))
+                
+                # 3. 添加时间戳水印
+                from PIL import ImageDraw, ImageFont
+                draw = ImageDraw.Draw(image)
+                timestamp_text = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                try:
+                    draw.text((10, 480), timestamp_text, fill=(0, 255, 0))
+                    draw.text((10, 10), f"EVIDENCE #{random.randint(1000, 9999)}", fill=(0, 255, 0))
+                except:
+                    pass
+                
+                # 保存
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"evidence_{timestamp}.png"
+                filepath = f"static/generated/{filename}"
+                image.save(filepath)
+                
+                print(f"[generate_evidence_image] ✅ Stable Diffusion 图片已生成: {filepath}")
+                return f"/generated/{filename}"
+                
+            except Exception as sd_error:
+                print(f"[generate_evidence_image] Stable Diffusion 失败: {sd_error}")
+                print(f"[generate_evidence_image] 回退到占位符图片...")
+                # 回退到占位符
+                use_real_ai = False
         
-        image_url = response.data[0].url
-        
-        # Download and save image
-        img_response = requests.get(image_url)
-        img = Image.open(BytesIO(img_response.content))
-        
-        # Generate unique filename
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"evidence_{timestamp}.png"
-        filepath = f"static/generated/{filename}"
-        
-        img.save(filepath)
-        
-        return f"/generated/{filename}"
+        if not use_real_ai:
+            # 占位符版本 - 生成模拟"证据图片"
+            print(f"[generate_evidence_image] 使用占位符图片")
+            from PIL import Image, ImageDraw
+            import random
+            
+            # 创建暗色噪点图像
+            img = Image.new('RGB', (512, 512), color=(10, 10, 10))
+            draw = ImageDraw.Draw(img)
+            
+            # 添加噪点效果
+            pixels = img.load()
+            for i in range(512):
+                for j in range(512):
+                    noise = random.randint(-30, 30)
+                    pixels[i, j] = (
+                        max(0, min(255, 10 + noise)),
+                        max(0, min(255, 10 + noise)),
+                        max(0, min(255, 10 + noise))
+                    )
+            
+            # 添加水印
+            try:
+                draw.text((10, 10), f"EVIDENCE #{random.randint(1000, 9999)}", fill=(0, 255, 0))
+                draw.text((10, 490), f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", fill=(0, 255, 0))
+            except:
+                pass
+            
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"evidence_{timestamp}.png"
+            filepath = f"static/generated/{filename}"
+            img.save(filepath)
+            
+            return f"/generated/{filename}"
         
     except Exception as e:
-        print(f"Error generating evidence image: {e}")
+        print(f"[generate_evidence_image] 错误: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def generate_evidence_audio(text_content):
-    """Generate spooky audio narration using OpenAI TTS"""
+    """生成诡异现场环境音频（合成的诡异音效，不是朗诵）"""
     try:
-        # Limit text length for TTS
-        narration_text = text_content[:500]
+        print(f"[generate_evidence_audio] 生成诡异现场环境音频...")
         
-        response = openai_client.audio.speech.create(
-            model="tts-1",
-            voice="onyx",  # Deep, serious voice
-            input=narration_text
-        )
-        
-        # Generate unique filename
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"audio_{timestamp}.mp3"
-        filepath = f"static/generated/{filename}"
-        
-        response.stream_to_file(filepath)
-        
-        return f"/generated/{filename}"
+        try:
+            import numpy as np
+            from scipy.io import wavfile
+            from scipy import signal
+            
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            
+            # 生成诡异环境音频的多个层次
+            sample_rate = 22050  # 22kHz采样率
+            duration = 1.5  # 1.5秒音频
+            
+            # 创建基础音频数据
+            t = np.linspace(0, duration, int(sample_rate * duration))
+            
+            # 层1: 低频嗡鸣声（诡异氛围，像人声的"呃"音）
+            low_freq_buzz = 0.15 * np.sin(2 * np.pi * 45 * t)
+            
+            # 层2: 间歇性的高频尖叫声（如风或诡异音）
+            scream_freqs = [800, 1200, 1600]
+            screams = np.zeros_like(t)
+            for freq in scream_freqs:
+                envelope = signal.square(2 * np.pi * 2.5 * t) * 0.5 + 0.5
+                screams += 0.08 * envelope * np.sin(2 * np.pi * freq * t)
+            
+            # 层3: 白噪声（环境背景音）
+            np.random.seed(42)
+            white_noise = 0.12 * np.random.normal(0, 1, len(t))
+            white_noise = signal.lfilter([1, 2, 1], [1, 0, 0], white_noise) / 4
+            
+            # 层4: 诡异的脉冲音（如心跳或敲击声）
+            pulse_freq = 2
+            pulse_envelope = signal.square(2 * np.pi * pulse_freq * t) * 0.5 + 0.5
+            pulse = 0.1 * pulse_envelope * np.sin(2 * np.pi * 150 * t)
+            
+            # 组合所有层
+            audio_data = low_freq_buzz + screams + white_noise + pulse
+            
+            # 添加动态变化（恐怖感）
+            envelope = np.ones_like(t)
+            envelope[:len(envelope)//2] = np.linspace(0.3, 1.0, len(envelope)//2)
+            envelope[len(envelope)//2:] = np.linspace(1.0, 0.6, len(envelope)//2)
+            envelope[len(envelope)//2:] += 0.1 * np.random.normal(0, 1, len(envelope)//2)
+            
+            audio_data *= envelope
+            
+            # 规范化音量（防止失真）
+            max_val = np.max(np.abs(audio_data))
+            if max_val > 0:
+                audio_data = (audio_data / max_val) * 0.95
+            
+            # 转换为16位PCM格式
+            audio_int16 = np.int16(audio_data * 32767)
+            
+            # 保存为WAV文件
+            wav_filename = f"eerie_sound_{timestamp}.wav"
+            wav_filepath = f"static/generated/{wav_filename}"
+            wavfile.write(wav_filepath, sample_rate, audio_int16)
+            
+            print(f"[generate_evidence_audio] ✅ 诡异音频已生成: {wav_filepath}")
+            return f"/generated/{wav_filename}"
+            
+        except ImportError as e:
+            print(f"[generate_evidence_audio] scipy/numpy 导入失败: {e}，使用备用方案...")
+            
+            # 备用方案：使用 pydub 生成环境音效
+            try:
+                from pydub import AudioSegment
+                from pydub.generators import WhiteNoise, Sine
+                import random
+                
+                duration = 3000  # 3秒
+                noise = WhiteNoise().to_audio_segment(duration=duration)
+                noise = noise - 35  # 降低音量
+                
+                # 添加随机的诡异音效
+                for _ in range(random.randint(4, 7)):
+                    pos = random.randint(0, duration - 500)
+                    freq = random.randint(300, 1000)  # 诡异频率
+                    tone_duration = random.randint(150, 500)
+                    tone = Sine(freq).to_audio_segment(duration=tone_duration)
+                    tone = tone - 28
+                    noise = noise.overlay(tone, position=pos)
+                
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"eerie_audio_{timestamp}.mp3"
+                filepath = f"static/generated/{filename}"
+                
+                noise.export(filepath, format="mp3", bitrate="64k")
+                
+                print(f"[generate_evidence_audio] ✅ 诡异音效已生成（备用）: {filepath}")
+                return f"/generated/{filename}"
+                
+            except Exception as pydub_error:
+                print(f"[generate_evidence_audio] pydub也失败了: {pydub_error}，使用占位符")
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                return f"/generated/audio_placeholder_{timestamp}.mp3"
         
     except Exception as e:
-        print(f"Error generating audio: {e}")
-        return None
+        print(f"[generate_evidence_audio] 错误: {e}")
+        import traceback
+        traceback.print_exc()
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return f"/generated/audio_placeholder_{timestamp}.mp3"
 
 def generate_ai_response(story, user_comment):
     """Generate AI chatbot response to user comment"""

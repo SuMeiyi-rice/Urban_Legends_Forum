@@ -58,16 +58,34 @@ def start_scheduler(app):
     """Initialize and start the background scheduler"""
     scheduler = BackgroundScheduler()
     
-    # Generate new stories every 6 hours
-    story_interval = int(os.getenv('STORY_GEN_INTERVAL_HOURS', 6))
-    scheduler.add_job(
-        func=scheduled_story_generation,
-        trigger='interval',
-        hours=story_interval,
-        id='story_generation',
-        name='Generate new AI urban legends',
-        replace_existing=True
-    )
+    # 支持分钟和小时两种配置
+    story_interval_minutes = os.getenv('STORY_GEN_INTERVAL_MINUTES')
+    story_interval_hours = os.getenv('STORY_GEN_INTERVAL_HOURS')
+    
+    if story_interval_minutes:
+        # 使用分钟间隔（用于测试）
+        interval_minutes = int(story_interval_minutes)
+        scheduler.add_job(
+            func=scheduled_story_generation,
+            trigger='interval',
+            minutes=interval_minutes,
+            id='story_generation',
+            name='Generate new AI urban legends',
+            replace_existing=True
+        )
+        interval_text = f"every {interval_minutes} minutes"
+    else:
+        # 使用小时间隔（默认6小时）
+        interval_hours = int(story_interval_hours or 6)
+        scheduler.add_job(
+            func=scheduled_story_generation,
+            trigger='interval',
+            hours=interval_hours,
+            id='story_generation',
+            name='Generate new AI urban legends',
+            replace_existing=True
+        )
+        interval_text = f"every {interval_hours} hours"
     
     # Check story state progression every 30 minutes
     scheduler.add_job(
@@ -81,7 +99,7 @@ def start_scheduler(app):
     
     scheduler.start()
     print("✅ Background scheduler started!")
-    print(f"   - Story generation: every {story_interval} hours")
+    print(f"   - Story generation: {interval_text}")
     print(f"   - State progression: every 30 minutes")
     
     return scheduler

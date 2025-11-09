@@ -1,0 +1,867 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>都市传说档案馆 - URBAN LEGENDS ARCHIVE</title>
+    <link rel="shortcut icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👻</text></svg>">
+    <style>
+        /* Mac OS 3 暗色系风格 - 内联版本 */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-dark: #333333;
+            --bg-darker: #1a1a1a;
+            --bg-window: #c0c0c0;
+            --bg-content: #dfdfdf;
+            --text-dark: #000000;
+            --text-light: #ffffff;
+            --text-gray: #666666;
+            --border-light: #ffffff;
+            --border-dark: #808080;
+            --border-darker: #000000;
+            --accent-purple: #6b0080;
+            --accent-red: #8b0000;
+            --accent-cyan: #00c0c0;
+            --titlebar-blue: #000080;
+            --shadow-dark: rgba(0,0,0,0.5);
+            --shadow-light: rgba(255,255,255,0.3);
+        }
+        
+        body {
+            font-family: 'MS Sans Serif', 'Arial', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-dark);
+            font-size: 11px;
+            line-height: 1.5;
+            overflow-x: hidden;
+        }
+        
+        .menubar {
+            background: linear-gradient(180deg, #c0c0c0, #a0a0a0);
+            border-bottom: 2px solid;
+            border-bottom-color: #ffffff;
+            border-right: 1px solid var(--border-dark);
+            padding: 2px 4px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 20px;
+            box-shadow: inset 1px 1px 0 var(--border-light), inset -1px -1px 0 var(--border-darker);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .menu-item {
+            font-size: 11px;
+            font-weight: bold;
+            color: var(--text-dark);
+            padding: 2px 4px;
+            user-select: none;
+        }
+        
+        .main-container {
+            width: 100%;
+            height: calc(100vh - 20px);
+            background-color: var(--bg-dark);
+        }
+        
+        .main-container td {
+            background-color: var(--bg-dark);
+        }
+        
+        .sidebar, .sidebar-right {
+            padding: 10px;
+            background-color: var(--bg-dark);
+            overflow-y: auto;
+            width: 180px;
+        }
+        
+        .main-content {
+            padding: 10px;
+            background-color: var(--bg-dark);
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .macos3-window {
+            background-color: var(--bg-window);
+            border: 2px solid;
+            border-color: var(--border-light) var(--border-darker) var(--border-darker) var(--border-light);
+            box-shadow: 1px 1px 0 var(--border-light), -1px -1px 0 var(--border-darker), inset 1px 1px 0 var(--shadow-light), inset -1px -1px 0 var(--shadow-dark);
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .macos3-dialog {
+            background-color: var(--bg-window);
+            border: 2px solid;
+            border-color: var(--border-light) var(--border-darker) var(--border-darker) var(--border-light);
+            box-shadow: 2px 2px 0 var(--shadow-dark), inset 1px 1px 0 var(--shadow-light), inset -1px -1px 0 var(--shadow-dark);
+            min-width: 280px;
+            max-width: 600px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .macos3-dialog.large {
+            max-width: 700px;
+            max-height: 85vh;
+        }
+        
+        .window-titlebar {
+            background: linear-gradient(90deg, #000080, #1084d7);
+            color: var(--text-light);
+            padding: 2px 2px 2px 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            font-size: 11px;
+            user-select: none;
+            cursor: move;
+        }
+        
+        .window-titlebar.active {
+            background: linear-gradient(90deg, #000080, #1084d7);
+        }
+        
+        .titlebar-text {
+            flex: 1;
+            padding: 2px 4px;
+            text-align: center;
+            color: var(--text-light);
+        }
+        
+        .titlebar-buttons {
+            display: flex;
+            gap: 2px;
+        }
+        
+        .btn-close, .btn-minimize, .btn-maximize {
+            width: 16px;
+            height: 14px;
+            background: linear-gradient(135deg, #c0c0c0, #808080);
+            border: 1px solid;
+            border-color: var(--border-light) var(--border-darker) var(--border-darker) var(--border-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-dark);
+            font-size: 8px;
+            cursor: pointer;
+            box-shadow: inset 1px 1px 0 var(--shadow-light), inset -1px -1px 0 var(--shadow-dark);
+        }
+        
+        .btn-close:active, .btn-minimize:active, .btn-maximize:active {
+            box-shadow: inset -1px -1px 0 var(--shadow-light), inset 1px 1px 0 var(--shadow-dark);
+        }
+        
+        .window-content {
+            background-color: var(--bg-content);
+            color: var(--text-dark);
+            padding: 8px;
+            border: 1px solid;
+            border-color: var(--border-light) var(--border-dark) var(--border-dark) var(--border-light);
+            font-size: 11px;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .window-content.scrollable {
+            overflow-y: auto;
+        }
+        
+        .dialog-content {
+            background-color: var(--bg-content);
+            color: var(--text-dark);
+            padding: 12px;
+            border: 1px solid;
+            border-color: var(--border-light) var(--border-dark) var(--border-dark) var(--border-light);
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .dialog-content.scrollable {
+            overflow-y: auto;
+        }
+        
+        .category-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .category-item {
+            padding: 6px 8px;
+            background-color: var(--bg-content);
+            border: 1px solid;
+            border-color: var(--border-light) var(--border-dark) var(--border-dark) var(--border-light);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            transition: background-color 0.2s;
+        }
+        
+        .category-item:hover {
+            background-color: #e8e8e8;
+        }
+        
+        .category-item.active {
+            background: linear-gradient(90deg, #000080, #1084d7);
+            color: var(--text-light);
+            border-color: #1084d7 #000080 #000080 #1084d7;
+            box-shadow: inset 1px 1px 0 #4080ff;
+        }
+        
+        .category-icon {
+            font-size: 12px;
+        }
+        
+        .category-label {
+            flex: 1;
+        }
+        
+        .stories-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .story-item {
+            background: linear-gradient(180deg, #e8e8e8, #d8d8d8);
+            border: 2px solid;
+            border-color: var(--border-light) var(--border-darker) var(--border-darker) var(--border-light);
+            padding: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: inset 1px 1px 0 var(--shadow-light), inset -1px -1px 0 var(--shadow-dark), 2px 2px 4px var(--shadow-dark);
+        }
+        
+        .story-item:hover {
+            background: linear-gradient(180deg, #f0f0f0, #e0e0e0);
+            transform: translate(-2px, -2px);
+            box-shadow: inset 1px 1px 0 var(--shadow-light), inset -1px -1px 0 var(--shadow-dark), 4px 4px 8px var(--shadow-dark);
+        }
+        
+        .story-item:active {
+            transform: translate(1px, 1px);
+            border-color: var(--border-darker) var(--border-light) var(--border-light) var(--border-darker);
+            box-shadow: inset -1px -1px 0 var(--shadow-light), inset 1px 1px 0 var(--shadow-dark), 1px 1px 2px var(--shadow-dark);
+        }
+        
+        .story-title {
+            font-weight: bold;
+            color: var(--accent-red);
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+        
+        .story-meta {
+            font-size: 10px;
+            color: var(--text-gray);
+            display: flex;
+            gap: 12px;
+            margin-bottom: 4px;
+        }
+        
+        .story-preview {
+            font-size: 10px;
+            color: var(--text-dark);
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+        
+        .story-footer {
+            font-size: 9px;
+            color: var(--text-gray);
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px dotted var(--border-dark);
+            padding-top: 4px;
+        }
+        
+        .user-card {
+            text-align: center;
+            padding: 8px;
+            border: 1px dotted var(--border-dark);
+            background-color: #efefef;
+            margin-bottom: 8px;
+        }
+        
+        .user-avatar {
+            font-size: 28px;
+            margin-bottom: 4px;
+        }
+        
+        .user-name {
+            font-weight: bold;
+            color: var(--text-dark);
+            font-size: 12px;
+        }
+        
+        .macos3-button {
+            background: linear-gradient(180deg, #dfdfdf, #a0a0a0);
+            border: 2px solid;
+            border-color: var(--border-light) var(--border-darker) var(--border-darker) var(--border-light);
+            color: var(--text-dark);
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.1s;
+            box-shadow: inset 1px 1px 0 var(--shadow-light), inset -1px -1px 0 var(--shadow-dark);
+            margin: 4px;
+            width: calc(100% - 8px);
+        }
+        
+        .macos3-button:hover {
+            background: linear-gradient(180deg, #efefef, #b0b0b0);
+        }
+        
+        .macos3-button:active {
+            border-color: var(--border-darker) var(--border-light) var(--border-light) var(--border-darker);
+            box-shadow: inset -1px -1px 0 var(--shadow-light), inset 1px 1px 0 var(--shadow-dark);
+        }
+        
+        .macos3-input {
+            background-color: var(--text-light);
+            border: 2px solid;
+            border-color: var(--border-darker) var(--border-light) var(--border-light) var(--border-darker);
+            padding: 4px 6px;
+            font-size: 11px;
+            font-family: 'MS Sans Serif', 'Arial', sans-serif;
+            width: 100%;
+            color: var(--text-dark);
+            box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #808080;
+            margin: 4px 0;
+        }
+        
+        .macos3-input:focus {
+            outline: none;
+            border-color: var(--titlebar-blue);
+        }
+        
+        .form-group {
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group label {
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 4px;
+            color: var(--text-dark);
+        }
+        
+        .form-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 12px;
+            gap: 8px;
+        }
+        
+        .form-buttons button {
+            flex: 1;
+        }
+        
+        .page-header {
+            padding: 12px;
+            text-align: center;
+            border-bottom: 2px dashed var(--accent-purple);
+            margin-bottom: 12px;
+        }
+        
+        .page-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--accent-red);
+            margin-bottom: 4px;
+        }
+        
+        .page-subtitle {
+            font-size: 12px;
+            color: var(--accent-purple);
+            margin-bottom: 4px;
+        }
+        
+        .page-desc {
+            font-size: 11px;
+            color: var(--text-gray);
+            margin: 2px 0;
+        }
+        
+        .stat-item {
+            padding: 4px;
+            margin: 4px 0;
+            border-bottom: 1px dotted var(--border-dark);
+            font-size: 11px;
+            color: var(--text-dark);
+        }
+        
+        .update-item {
+            padding: 4px 6px;
+            margin: 4px 0;
+            border-left: 3px solid var(--accent-purple);
+            background-color: #efefef;
+            font-size: 10px;
+            color: var(--text-dark);
+        }
+        
+        .about-text {
+            padding: 4px;
+            margin: 4px 0;
+            font-size: 10px;
+            color: var(--text-gray);
+        }
+        
+        .notification-empty {
+            text-align: center;
+            color: var(--text-gray);
+            padding: 8px;
+            font-size: 10px;
+        }
+        
+        .evidence-section {
+            margin: 12px 0;
+            padding: 8px;
+            border: 1px solid var(--border-dark);
+            background-color: #efefef;
+        }
+        
+        .evidence-title {
+            font-weight: bold;
+            color: var(--accent-red);
+            margin-bottom: 6px;
+            font-size: 11px;
+        }
+        
+        .evidence-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+        }
+        
+        .evidence-item {
+            border: 1px solid var(--border-dark);
+            padding: 4px;
+            background-color: var(--text-light);
+        }
+        
+        .evidence-item img {
+            width: 100%;
+            height: auto;
+            border: 1px solid var(--border-dark);
+        }
+        
+        .evidence-item audio {
+            width: 100%;
+            height: 24px;
+        }
+        
+        .evidence-desc {
+            font-size: 9px;
+            color: var(--text-gray);
+            margin-top: 4px;
+            word-break: break-word;
+        }
+        
+        .comment-section {
+            margin-top: 12px;
+            padding: 8px;
+            background-color: #efefef;
+            border: 1px solid var(--border-dark);
+        }
+        
+        .comment-section h3 {
+            font-size: 12px;
+            margin-bottom: 8px;
+            color: var(--accent-purple);
+        }
+        
+        .comment-item {
+            margin-bottom: 8px;
+            padding: 6px;
+            background-color: var(--text-light);
+            border: 1px solid var(--border-dark);
+            font-size: 11px;
+        }
+        
+        .comment-author {
+            font-weight: bold;
+            color: var(--accent-purple);
+            margin-bottom: 2px;
+            font-size: 11px;
+        }
+        
+        .comment-text {
+            color: var(--text-dark);
+            margin: 4px 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.4;
+        }
+        
+        .comment-time {
+            font-size: 9px;
+            color: var(--text-gray);
+            border-top: 1px dotted var(--border-dark);
+            padding-top: 2px;
+        }
+        
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .footer {
+            background: linear-gradient(180deg, #c0c0c0, #a0a0a0);
+            border-top: 2px solid;
+            border-top-color: var(--border-light);
+            padding: 6px 10px;
+            font-size: 10px;
+            color: var(--text-dark);
+            text-align: center;
+        }
+        
+        .footer p {
+            margin: 2px 0;
+        }
+        
+        .loading-text {
+            text-align: center;
+            color: var(--text-gray);
+            padding: 20px;
+            font-size: 12px;
+        }
+        
+        ::-webkit-scrollbar {
+            width: 16px;
+            height: 16px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: linear-gradient(180deg, #c0c0c0, #a0a0a0);
+            border: 1px solid;
+            border-color: var(--border-light) var(--border-darker) var(--border-darker) var(--border-light);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(90deg, #dfdfdf, #a0a0a0);
+            border: 2px solid;
+            border-color: var(--border-light) var(--border-darker) var(--border-darker) var(--border-light);
+            box-shadow: inset 1px 1px 0 var(--shadow-light);
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(90deg, #efefef, #b0b0b0);
+        }
+        
+        ::-webkit-scrollbar-corner {
+            background: #c0c0c0;
+        }
+        
+        @media (max-width: 1024px) {
+            .main-container td {
+                display: block;
+                width: 100% !important;
+                border-bottom: 2px solid var(--border-dark);
+            }
+            .sidebar, .sidebar-right {
+                width: 100%;
+                margin-bottom: 10px;
+            }
+            .main-content {
+                width: 100%;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                font-size: 10px;
+            }
+            .page-title {
+                font-size: 14px;
+            }
+            .evidence-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @keyframes shine {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+        
+        .macos3-button:hover {
+            animation: shine 1s infinite;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Mac OS 3 风格菜单栏 -->
+<div class="menubar">
+    <div class="menu-item" id="menu-clock">12:00:00</div>
+</div>
+
+<!-- 主容器 -->
+<table class="main-container" cellpadding="0" cellspacing="0" border="0" width="100%">
+    <tr>
+        <!-- 左侧栏 - 分类和用户 -->
+        <td class="sidebar" valign="top">
+            <!-- 分类窗口 -->
+            <div class="macos3-window">
+                <div class="window-titlebar">
+                    <span class="titlebar-buttons">
+                        <span class="btn-close">●</span>
+                        <span class="btn-minimize">●</span>
+                        <span class="btn-maximize">●</span>
+                    </span>
+                    <span class="titlebar-text">档案分类</span>
+                </div>
+                <div class="window-content">
+                    <div class="category-list">
+                        <div class="category-item active" data-category="all">
+                            <span class="category-icon">📂</span>
+                            <span class="category-label">全部档案</span>
+                        </div>
+                        <div class="category-item" data-category="subway_ghost">
+                            <span class="category-icon">🚇</span>
+                            <span class="category-label">地铁灵异</span>
+                        </div>
+                        <div class="category-item" data-category="abandoned_building">
+                            <span class="category-icon">🏚️</span>
+                            <span class="category-label">废弃建筑</span>
+                        </div>
+                        <div class="category-item" data-category="cursed_object">
+                            <span class="category-icon">🗿</span>
+                            <span class="category-label">诅咒物品</span>
+                        </div>
+                        <div class="category-item" data-category="missing_person">
+                            <span class="category-icon">👤</span>
+                            <span class="category-label">失踪案件</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 用户窗口 -->
+            <div class="macos3-window" style="margin-top: 15px;">
+                <div class="window-titlebar">
+                    <span class="titlebar-buttons">
+                        <span class="btn-close">●</span>
+                        <span class="btn-minimize">●</span>
+                        <span class="btn-maximize">●</span>
+                    </span>
+                    <span class="titlebar-text">用户</span>
+                </div>
+                <div class="window-content">
+                    <div id="guest-view">
+                        <button class="macos3-button" id="login-btn">登 录</button>
+                        <button class="macos3-button" id="register-btn">注 册</button>
+                    </div>
+                    <div id="user-view" style="display: none;">
+                        <div class="user-card">
+                            <div id="user-avatar" class="user-avatar">👻</div>
+                            <div id="user-name" class="user-name">User</div>
+                        </div>
+                        <button class="macos3-button" id="logout-btn">登 出</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 统计窗口 -->
+            <div class="macos3-window" style="margin-top: 15px;">
+                <div class="window-titlebar">
+                    <span class="titlebar-buttons">
+                        <span class="btn-close">●</span>
+                        <span class="btn-minimize">●</span>
+                        <span class="btn-maximize">●</span>
+                    </span>
+                    <span class="titlebar-text">档案统计</span>
+                </div>
+                <div class="window-content">
+                    <p class="stat-item">📊 总档案数: <span id="story-count">0</span></p>
+                    <p class="stat-item">👥 在线用户: 1</p>
+                    <p class="stat-item">⏰ 最后更新: 刚刚</p>
+                </div>
+            </div>
+        </td>
+
+        <!-- 中间内容区 -->
+        <td class="main-content" valign="top">
+            <!-- 标题窗口 -->
+            <div class="macos3-window">
+                <div class="window-titlebar active">
+                    <span class="titlebar-buttons">
+                        <span class="btn-close">●</span>
+                        <span class="btn-minimize">●</span>
+                        <span class="btn-maximize">●</span>
+                    </span>
+                    <span class="titlebar-text">都市传说档案馆</span>
+                </div>
+                <div class="window-content">
+                    <div class="page-header">
+                        <h1 class="page-title">👻 URBAN LEGENDS ARCHIVE 👻</h1>
+                        <p class="page-subtitle">~ 香港诡异档案库 ~</p>
+                        <p class="page-desc">⚠️ 这里存放的是来自香港各地的真实恐怖故事...</p>
+                        <p class="page-desc" style="font-size: 10px; color: #888;">※ 每个故事都由 AI 楼主亲身经历过 ※</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 故事列表窗口 -->
+            <div class="macos3-window" style="margin-top: 15px; flex: 1;">
+                <div class="window-titlebar">
+                    <span class="titlebar-buttons">
+                        <span class="btn-close">●</span>
+                        <span class="btn-minimize">●</span>
+                        <span class="btn-maximize">●</span>
+                    </span>
+                    <span class="titlebar-text">档案列表</span>
+                </div>
+                <div class="window-content scrollable">
+                    <div id="stories-container" class="stories-container">
+                        <div class="loading-text">⏳ 加载档案中...</div>
+                    </div>
+                </div>
+            </div>
+        </td>
+
+        <!-- 右侧栏 - 信息和通知 -->
+        <td class="sidebar-right" valign="top">
+            <!-- 最新更新窗口 -->
+            <div class="macos3-window">
+                <div class="window-titlebar">
+                    <span class="titlebar-buttons">
+                        <span class="btn-close">●</span>
+                        <span class="btn-minimize">●</span>
+                        <span class="btn-maximize">●</span>
+                    </span>
+                    <span class="titlebar-text">最新更新</span>
+                </div>
+                <div class="window-content">
+                    <div class="update-item">⚡ 系统已启动</div>
+                    <div class="update-item">🎃 AI楼主开始发帖</div>
+                    <div class="update-item">📸 证据不断更新中</div>
+                    <div class="update-item">💬 评论数在增加</div>
+                </div>
+            </div>
+
+            <!-- 通知窗口 -->
+            <div class="macos3-window" style="margin-top: 15px;">
+                <div class="window-titlebar">
+                    <span class="titlebar-buttons">
+                        <span class="btn-close">●</span>
+                        <span class="btn-minimize">●</span>
+                        <span class="btn-maximize">●</span>
+                    </span>
+                    <span class="titlebar-text">系统通知</span>
+                </div>
+                <div class="window-content">
+                    <div id="notification-list">
+                        <p class="notification-empty">📪 暂无通知</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 关于窗口 -->
+            <div class="macos3-window" style="margin-top: 15px;">
+                <div class="window-titlebar">
+                    <span class="titlebar-buttons">
+                        <span class="btn-close">●</span>
+                        <span class="btn-minimize">●</span>
+                        <span class="btn-maximize">●</span>
+                    </span>
+                    <span class="titlebar-text">关于本站</span>
+                </div>
+                <div class="window-content">
+                    <p class="about-text">🚀 完全本地 AI 驱动</p>
+                    <p class="about-text">💾 SQLite 数据库</p>
+                    <p class="about-text">🤖 LM Studio 文字生成</p>
+                    <p class="about-text">🎨 Stable Diffusion 作图</p>
+                    <p class="about-text">🔊 Google TTS 配音</p>
+                </div>
+            </div>
+        </td>
+    </tr>
+</table>
+
+<!-- 页脚 -->
+<div class="footer">
+    <p>⚠️ <strong>免责声明</strong>: 本站所有故事为 AI 虚构，请勿对号入座或模仿。</p>
+    <p style="font-size: 10px;">© 2025 Urban Legends Archive | 由恐惧和代码驱动 💀</p>
+</div>
+
+<!-- 登录/注册模态框 -->
+<div id="auth-modal" class="modal-backdrop" style="display: none;">
+    <div class="macos3-dialog">
+        <div class="window-titlebar">
+            <span class="titlebar-buttons">
+                <span class="btn-close">●</span>
+                <span class="btn-minimize">●</span>
+                <span class="btn-maximize">●</span>
+            </span>
+            <span id="modal-title" class="titlebar-text">登 录</span>
+        </div>
+        <div class="dialog-content">
+            <form id="auth-form">
+                <div class="form-group">
+                    <label for="username">用户名:</label>
+                    <input type="text" id="username" name="username" class="macos3-input">
+                </div>
+                <div class="form-group">
+                    <label for="password">密    码:</label>
+                    <input type="password" id="password" name="password" class="macos3-input">
+                </div>
+                <div id="email-group" class="form-group" style="display: none;">
+                    <label for="email">电子邮件:</label>
+                    <input type="email" id="email" name="email" class="macos3-input">
+                </div>
+                <div class="form-buttons">
+                    <button type="submit" class="macos3-button" style="width: 45%;">确 定</button>
+                    <button type="button" class="macos3-button" id="toggle-auth" style="width: 45%;">切 换</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 故事详情模态框 -->
+<div id="story-modal" class="modal-backdrop" style="display: none;">
+    <div class="macos3-dialog large">
+        <div class="window-titlebar">
+            <span class="titlebar-buttons">
+                <span class="btn-close">●</span>
+                <span class="btn-minimize">●</span>
+                <span class="btn-maximize">●</span>
+            </span>
+            <span id="story-title" class="titlebar-text">档案详情</span>
+        </div>
+        <div class="dialog-content scrollable" id="story-content">
+            <p class="loading-text">加载中...</p>
+        </div>
+    </div>
+</div>
+
+<script src="static/app.js"></script>
+
+</body>
+</html>
