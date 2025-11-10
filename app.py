@@ -80,10 +80,93 @@ class Notification(db.Model):
     is_read = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+def init_default_stories():
+    """初始化默认的三个故事（如果数据库为空）"""
+    if Story.query.count() == 0:
+        print("📝 创建默认故事...")
+        
+        default_stories = [
+            {
+                'title': '深夜地铁的第13节车厢',
+                'content': '''昨晚加班到凌晨，赶最后一班地铁回家。车厢里只有零星几个人，我坐在靠门的位置刷手机。
+
+列车停靠在"老街站"时，我无意间抬头看了一眼站台显示屏——上面显示这是"13号车厢"。
+
+可是我明明记得这条线路只有12节车厢...
+
+我环顾四周，发现其他乘客都低着头，一动不动。窗外的站台空无一人，但月台上的电子钟显示的时间是"25:73"。
+
+车门缓缓关上，列车继续前行。我想站起来走到其他车厢，但双腿像灌了铅一样沉重。
+
+最诡异的是，我发现窗户上倒映着我的脸，但表情却不是我现在的样子——镜中的我在笑，笑得很诡异...
+
+各位，我该怎么办？现在列车还在行驶，但导航显示我的位置一直在"老街站"没有移动...''',
+                'category': 'subway_ghost',
+                'location': '地铁2号线',
+                'is_ai_generated': True,
+                'ai_persona': 'paranoid_reporter',
+                'current_state': 'initial'
+            },
+            {
+                'title': '出租屋镜子里的"室友"',
+                'content': '''刚搬进这个老小区的单间已经三天了，房租便宜到离谱，房东说之前的租客"搬走了"。
+
+第一天晚上洗漱时，我注意到浴室镜子有点模糊，就用毛巾擦了擦。擦完后，镜子里好像有什么东西一闪而过，但我以为是眼花。
+
+第二天，我发现镜子上有一个手印，五根手指细长，明显不是我的。我把它擦掉了，心里有点发毛。
+
+今天早上，我在镜子里看到了...一个模糊的人影站在我身后。我猛地转身，身后什么都没有。但当我再次看向镜子时，那个人影还在，而且...它在对我笑。
+
+最可怕的是，我发现它的嘴型在说："别走，陪我玩玩..."
+
+现在我不敢回头看镜子了，但又不敢离开浴室。它会跟出来吗？有人知道该怎么办吗？求助！''',
+                'category': 'cursed_object',
+                'location': '老城区单身公寓',
+                'is_ai_generated': True,
+                'ai_persona': 'scared_witness',
+                'current_state': 'initial'
+            },
+            {
+                'title': '凌晨三点的敲门声',
+                'content': '''我住在7楼，这栋楼一共只有6层。
+
+事情是这样的：上周开始，每天凌晨3:00整，我都会听到有人敲我家门。"咚、咚、咚"，三下，很有节奏。
+
+第一次我以为是邻居搞错了，开门一看，走廊空荡荡的。门上的猫眼是坏的，从里面看出去一片漆黑。
+
+第二次我装了监控，结果凌晨3点监控突然黑屏，只录到了敲门声，画面恢复时已经3:05了。
+
+昨晚，我决定不睡觉，就坐在门口等着。2:59分，我听到楼梯间传来脚步声，很轻，但很清晰地在往上走...走...走到7楼。
+
+我的门外传来了呼吸声。
+
+我透过门缝往外看，看到了一双腿...但那双腿是悬空的，离地至少有20厘米。
+
+"咚、咚、咚"——敲门声又响了。
+
+我没敢开门，现在天亮了，但我发现门把手上有一个血手印...
+
+各位，我该报警吗？还是搬家？有人遇到过类似的事情吗？''',
+                'category': 'apartment_mystery',
+                'location': '某住宅小区',
+                'is_ai_generated': True,
+                'ai_persona': 'investigator',
+                'current_state': 'initial'
+            }
+        ]
+        
+        for story_data in default_stories:
+            story = Story(**story_data)
+            db.session.add(story)
+        
+        db.session.commit()
+        print("✅ 默认故事创建完成")
+
 with app.app_context():
     db.create_all()
     os.makedirs('static/uploads', exist_ok=True)
     os.makedirs('static/generated', exist_ok=True)
+    init_default_stories()
 
 def generate_token(user_id):
     return jwt.encode({
@@ -153,22 +236,48 @@ def login():
 
 @app.route('/api/stories', methods=['GET'])
 def get_stories():
-    stories = Story.query.order_by(Story.created_at.desc()).all()
+    # 获取分页参数
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 8, type=int)  # 每页8个故事
     
-    return jsonify([{
-        'id': s.id,
-        'title': s.title,
-        'content': s.content[:200] + '...' if len(s.content) > 200 else s.content,
-        'category': s.category,
-        'location': s.location,
-        'is_ai_generated': s.is_ai_generated,
-        'ai_persona': s.ai_persona,
-        'current_state': s.current_state,
-        'created_at': s.created_at.isoformat(),
-        'views': s.views,
-        'comments_count': len(s.comments),
-        'evidence_count': len(s.evidence)
-    } for s in stories])
+    # 查询总数
+    total = Story.query.count()
+    
+    # 分页查询
+    pagination = Story.query.order_by(Story.created_at.desc()).paginate(
+        page=page,
+        per_page=per_page,
+        error_out=False
+    )
+    
+    stories = pagination.items
+    
+    return jsonify({
+        'stories': [{
+            'id': s.id,
+            'title': s.title,
+            'content': s.content[:200] + '...' if len(s.content) > 200 else s.content,
+            'category': s.category,
+            'location': s.location,
+            'is_ai_generated': s.is_ai_generated,
+            'ai_persona': s.ai_persona,
+            'current_state': s.current_state,
+            'created_at': s.created_at.isoformat(),
+            'views': s.views,
+            'comments_count': len(s.comments),
+            'evidence_count': len(s.evidence)
+        } for s in stories],
+        'pagination': {
+            'page': page,
+            'per_page': per_page,
+            'total': total,
+            'pages': pagination.pages,
+            'has_prev': pagination.has_prev,
+            'has_next': pagination.has_next,
+            'prev_page': pagination.prev_num if pagination.has_prev else None,
+            'next_page': pagination.next_num if pagination.has_next else None
+        }
+    })
 
 @app.route('/api/stories/<int:story_id>', methods=['GET'])
 def get_story(story_id):

@@ -288,6 +288,18 @@
             padding-top: 4px;
         }
         
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            gap: 10px;
+        }
+        
+        .pagination button {
+            min-width: 80px;
+        }
+        
         .user-card {
             text-align: center;
             padding: 8px;
@@ -741,6 +753,7 @@
                     <div id="stories-container" class="stories-container">
                         <div class="loading-text">⏳ 加载档案中...</div>
                     </div>
+                    <div id="pagination-container" style="margin-top: 10px;"></div>
                 </div>
             </div>
         </td>

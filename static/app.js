@@ -10,6 +10,9 @@ let allStories = [];
 let currentCategory = 'all';
 let lastStoryCount = 0;
 let lastNotificationCheck = 0;
+let currentPage = 1;
+let totalPages = 1;
+let pagination = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('✨ 都市传说档案馆已加载');
@@ -67,23 +70,29 @@ function bindEvents() {
     }
 }
 
-async function loadStories(silent = false) {
+async function loadStories(silent = false, page = 1) {
     try {
-        const response = await fetch(API_BASE + '/stories');
-        const newStories = await response.json();
+        const response = await fetch(`${API_BASE}/stories?page=${page}&per_page=8`);
+        const data = await response.json();
+        
+        allStories = data.stories;
+        pagination = data.pagination;
+        currentPage = pagination.page;
+        totalPages = pagination.pages;
         
         // 检测新故事
-        if (!silent && lastStoryCount > 0 && newStories.length > lastStoryCount) {
-            const diff = newStories.length - lastStoryCount;
+        if (!silent && lastStoryCount > 0 && pagination.total > lastStoryCount) {
+            const diff = pagination.total - lastStoryCount;
             showToast(`🎃 有 ${diff} 个新故事发布了！`, 'info');
         }
         
-        lastStoryCount = newStories.length;
-        allStories = newStories;
+        lastStoryCount = pagination.total;
         
         const countEl = document.getElementById('story-count');
-        if (countEl) countEl.textContent = allStories.length;
+        if (countEl) countEl.textContent = pagination.total;
+        
         renderStories();
+        renderPagination();
     } catch (error) {
         console.error('加载故事失败:', error);
         if (!silent) showToast('加载故事失败', 'error');
@@ -143,6 +152,45 @@ function renderStories() {
             '</div>' +
             '</div>';
     }).join('');
+}
+
+function renderPagination() {
+    const container = document.getElementById('pagination-container');
+    if (!container || !pagination) return;
+    
+    if (pagination.pages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = '<div class="pagination">';
+    
+    // 上一页按钮
+    if (pagination.has_prev) {
+        html += `<button class="macos3-button" onclick="changePage(${pagination.prev_page})">◀ 上一页</button>`;
+    } else {
+        html += `<button class="macos3-button" disabled style="opacity: 0.5;">◀ 上一页</button>`;
+    }
+    
+    // 页码信息
+    html += `<span style="margin: 0 15px; color: #6b0080; font-weight: bold;">第 ${pagination.page} / ${pagination.pages} 页</span>`;
+    
+    // 下一页按钮
+    if (pagination.has_next) {
+        html += `<button class="macos3-button" onclick="changePage(${pagination.next_page})">下一页 ▶</button>`;
+    } else {
+        html += `<button class="macos3-button" disabled style="opacity: 0.5;">下一页 ▶</button>`;
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function changePage(page) {
+    currentPage = page;
+    loadStories(false, page);
+    // 滚动到顶部
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 async function showStoryDetail(storyId) {
