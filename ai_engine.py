@@ -1,6 +1,6 @@
 import os
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from openai import OpenAI
 from anthropic import Anthropic
 import requests
@@ -438,19 +438,15 @@ def generate_evidence_image(story_title, story_content, comment_context=""):
                 # 检查是否有可用的模型
                 model_id = os.getenv('DIFFUSION_MODEL', 'runwayml/stable-diffusion-v1-5')
                 
-                # 创建恐怖风格的提示词
-                horror_keywords = [
-                    "dark", "grainy", "blurry", "low quality", 
-                    "found footage", "security camera", "night vision",
-                    "creepy", "eerie", "disturbing", "ominous"
-                ]
-                
-                # 根据故事类别调整提示词
+                # 创建伪纪实风格的提示词（类似图片中的样式）
+                # 根据故事内容生成具体的场景描述
                 location_hint = story_title[:50] if story_title else "urban location"
                 
-                prompt = f"dark grainy security camera footage, low quality photograph, creepy atmosphere, horror evidence photo, {location_hint}, blurred motion, night time, eerie shadows, disturbing scene, found footage style"
+                # 伪纪实风格：真实的照片质感，但内容诡异
+                prompt = f"realistic documentary style photograph, grainy film texture, surveillance camera footage, found photograph, {location_hint}, low light conditions, slightly blurred, atmospheric fog, mysterious shadow, amateur photography, evidence photo, timestamp overlay, security footage aesthetic, nocturnal scene, eerie but realistic"
                 
-                negative_prompt = "bright, colorful, high quality, clear, sharp, professional photography, daylight, happy, cartoon, anime"
+                # 负面提示词：避免艺术化、抽象、过于恐怖的元素
+                negative_prompt = "artistic, abstract art, painting, illustration, cartoon, anime, 3d render, digital art, fantasy, unrealistic, monsters, gore, explicit horror, professional photography, studio lighting, high contrast, oversaturated, colorful, bright, clear focus"
                 
                 print(f"[generate_evidence_image] Prompt: {prompt[:100]}...")
                 
@@ -486,23 +482,46 @@ def generate_evidence_image(story_title, story_content, comment_context=""):
                 
                 # 如果是256x256，放大到512x512（保持低质量感）
                 if img_size == 256:
-                    image = image.resize((512, 512), Image.Resampling.NEAREST)  # 使用NEAREST保持像素化效果
+                    image = image.resize((512, 512), Image.Resampling.BILINEAR)  # 使用BILINEAR获得更真实的模糊感
                 
-                # 后处理：添加噪点、降低质量、添加时间戳
-                # 1. 添加噪点
+                # 后处理：模拟真实的监控录像/手机拍摄效果
+                # 1. 轻微降低饱和度（模拟夜视/低光环境）
+                from PIL import ImageEnhance
+                enhancer = ImageEnhance.Color(image)
+                image = enhancer.enhance(0.6)  # 降低饱和度到60%
+                
+                # 2. 调整亮度（模拟曝光不足）
+                enhancer = ImageEnhance.Brightness(image)
+                image = enhancer.enhance(0.75)  # 稍微变暗
+                
+                # 3. 轻微对比度提升（模拟监控录像特征）
                 enhancer = ImageEnhance.Contrast(image)
-                image = enhancer.enhance(0.7)  # 降低对比度
+                image = enhancer.enhance(1.15)
                 
-                # 2. 模糊效果
-                image = image.filter(ImageFilter.GaussianBlur(radius=1))
+                # 4. 添加细微噪点（模拟胶片颗粒）
+                import numpy as np
+                img_array = np.array(image)
+                noise = np.random.normal(0, 3, img_array.shape)  # 细微噪点
+                img_array = np.clip(img_array + noise, 0, 255).astype(np.uint8)
+                image = Image.fromarray(img_array)
                 
-                # 3. 添加时间戳水印
+                # 5. 轻微模糊（模拟手抖/对焦不准）
+                image = image.filter(ImageFilter.GaussianBlur(radius=0.5))
+                
+                # 6. 添加监控录像样式的时间戳（右下角，类似图片中的样式）
                 from PIL import ImageDraw, ImageFont
                 draw = ImageDraw.Draw(image)
-                timestamp_text = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                
+                # 生成随机日期（过去30天内）
+                days_ago = random.randint(1, 30)
+                fake_date = datetime.now() - timedelta(days=days_ago)
+                timestamp_text = fake_date.strftime('%Y/%m/%d %H:%M:%S')
+                
                 try:
-                    draw.text((10, 480), timestamp_text, fill=(0, 255, 0))
-                    draw.text((10, 10), f"EVIDENCE #{random.randint(1000, 9999)}", fill=(0, 255, 0))
+                    # 右下角时间戳（白色，模拟监控录像）
+                    draw.text((340, 480), timestamp_text, fill=(220, 220, 220))
+                    # 左上角简单标记
+                    draw.text((10, 10), f"REC ●", fill=(200, 0, 0))
                 except:
                     pass
                 
@@ -522,30 +541,59 @@ def generate_evidence_image(story_title, story_content, comment_context=""):
                 use_real_ai = False
         
         if not use_real_ai:
-            # 占位符版本 - 生成模拟"证据图片"
-            print(f"[generate_evidence_image] 使用占位符图片")
-            from PIL import Image, ImageDraw
+            # 占位符版本 - 生成伪纪实风格的模拟照片
+            print(f"[generate_evidence_image] 使用占位符图片（伪纪实风格）")
+            from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
             import random
+            import numpy as np
             
-            # 创建暗色噪点图像
-            img = Image.new('RGB', (512, 512), color=(10, 10, 10))
+            # 创建带有渐变的暗色背景（模拟低光环境）
+            img = Image.new('RGB', (512, 512), color=(25, 28, 32))
+            
+            # 添加一些暗色形状（模拟模糊的物体/阴影）
             draw = ImageDraw.Draw(img)
+            for _ in range(5):
+                x1, y1 = random.randint(0, 400), random.randint(0, 400)
+                x2, y2 = x1 + random.randint(50, 150), y1 + random.randint(50, 150)
+                gray = random.randint(15, 50)
+                draw.rectangle([x1, y1, x2, y2], fill=(gray, gray, gray+5))
             
-            # 添加噪点效果
+            # 添加细微噪点（模拟胶片颗粒）
             pixels = img.load()
-            for i in range(512):
-                for j in range(512):
-                    noise = random.randint(-30, 30)
+            for i in range(0, 512, 2):  # 跳格处理以加快速度
+                for j in range(0, 512, 2):
+                    noise = random.randint(-8, 8)
+                    r, g, b = pixels[i, j]
                     pixels[i, j] = (
-                        max(0, min(255, 10 + noise)),
-                        max(0, min(255, 10 + noise)),
-                        max(0, min(255, 10 + noise))
+                        max(0, min(255, r + noise)),
+                        max(0, min(255, g + noise)),
+                        max(0, min(255, b + noise + 2))  # 轻微的蓝色偏移
                     )
             
-            # 添加水印
+            # 应用模糊（模拟对焦不准/手抖）
+            img = img.filter(ImageFilter.GaussianBlur(radius=1.5))
+            
+            # 降低饱和度
+            enhancer = ImageEnhance.Color(img)
+            img = enhancer.enhance(0.5)
+            
+            # 添加监控录像风格的时间戳
+            draw = ImageDraw.Draw(img)
+            days_ago = random.randint(1, 30)
+            fake_date = datetime.now() - timedelta(days=days_ago)
+            timestamp_text = fake_date.strftime('%Y/%m/%d %H:%M:%S')
+            
             try:
-                draw.text((10, 10), f"EVIDENCE #{random.randint(1000, 9999)}", fill=(0, 255, 0))
-                draw.text((10, 490), f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", fill=(0, 255, 0))
+                # 右下角时间戳（白色半透明）
+                draw.text((340, 480), timestamp_text, fill=(200, 200, 200))
+                # 左上角REC标记
+                draw.text((10, 10), f"REC ●", fill=(180, 0, 0))
+                # 添加一些模拟的扫描线
+                for y in range(0, 512, 8):
+                    draw.line([(0, y), (512, y)], fill=(255, 255, 255), width=1)
+                    img_array = np.array(img)
+                    img_array[y, :] = np.clip(img_array[y, :] * 0.95, 0, 255)
+                    img = Image.fromarray(img_array.astype(np.uint8))
             except:
                 pass
             
