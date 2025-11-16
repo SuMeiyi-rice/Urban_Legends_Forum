@@ -13,6 +13,10 @@ let lastNotificationCheck = 0;
 let currentPage = 1;
 let totalPages = 1;
 let pagination = null;
+// Notification client-side cache and pagination state
+let notificationsCache = [];
+let notifPerPage = 6;
+let notifCurrentPage = 1;
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('✨ 都市传说档案馆已加载');
@@ -162,11 +166,7 @@ function showUserCenter() {
     // TODO: 实现用户中心窗口
 }
 
-// 显示通知中心
-function showNotificationCenter() {
-    showToast('📬 通知中心功能开发中...', 'info');
-    // TODO: 实现通知中心窗口
-}
+// 通知中心逻辑在文件下方的异步实现处定义（避免重复）
 
 async function loadStories(silent = false, page = 1) {
     try {
@@ -213,20 +213,344 @@ async function checkNotifications() {
         if (res.ok) {
             const notifications = await res.json();
             const unread = notifications.filter(n => !n.is_read);
-            
+
+            // 更新菜单红点
+            updateNotificationBadge(unread.length);
+
             if (unread.length > lastNotificationCheck) {
-                // 有新通知
+                // 有新通知 - 仅对新出现的显示弹窗（可点击跳转）
                 const newCount = unread.length - lastNotificationCheck;
-                unread.slice(0, newCount).forEach(n => {
-                    showToast(`💬 ${n.content}`, 'info');
+                const newOnes = unread.slice(0, newCount);
+                newOnes.forEach(n => {
+                    showNotificationPopup(n);
                 });
             }
-            
+
             lastNotificationCheck = unread.length;
         }
     } catch (error) {
         console.error('检查通知失败:', error);
     }
+}
+
+// 更新菜单栏红点
+function updateNotificationBadge(count) {
+    const badge = document.getElementById('notification-badge');
+    if (!badge) return;
+    if (count && count > 0) {
+        badge.style.display = 'inline-block';
+        badge.textContent = count > 99 ? '99+' : String(count);
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+// 可点击的通知弹窗（会在点击时跳转并标记为已读）
+function showNotificationPopup(n) {
+    const id = 'notif-popup-' + Date.now();
+    const el = document.createElement('div');
+    el.id = id;
+    el.className = 'notification-popup';
+    el.style.position = 'fixed';
+    el.style.top = '20px';
+    el.style.right = '20px';
+    el.style.background = 'linear-gradient(180deg, #6699ff, #3366ff)';
+    el.style.color = '#fff';
+    el.style.padding = '10px 14px';
+    el.style.border = '2px outset #999';
+    el.style.fontSize = '12px';
+    el.style.zIndex = 2500;
+    el.style.boxShadow = '2px 2px 8px rgba(0,0,0,0.35)';
+    el.style.borderRadius = '4px';
+    el.innerHTML = '<div style="font-weight:bold; margin-bottom:4px;">通知</div><div style="max-width:300px;">' + escapeHtml(n.content) + '</div>';
+
+    el.addEventListener('click', () => {
+        openNotificationTarget(n.story_id, n.comment_id, n.id);
+        // remove immediately
+        el.remove();
+    });
+
+    document.body.appendChild(el);
+
+    // 自动移除（稍长些时间让用户点击）
+    setTimeout(() => {
+        const e = document.getElementById(id);
+        if (e) e.remove();
+    }, 8000);
+}
+
+// 打开通知目标：展示帖文、滚动到评论并高亮，标记通知已读
+async function openNotificationTarget(storyId, commentId, notificationId) {
+    try {
+        await showStoryDetail(storyId);
+
+        // 等待短暂时间确保 DOM 渲染完成
+        await new Promise(r => setTimeout(r, 180));
+
+        if (commentId) {
+            const el = document.getElementById('comment-' + commentId);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('comment-highlight');
+                setTimeout(() => el.classList.remove('comment-highlight'), 1800);
+            }
+        }
+
+        // 标记为已读（单条）并更新 badge
+        await markNotificationsRead([notificationId]);
+    } catch (err) {
+        console.error('打开通知目标失败:', err);
+    }
+}
+
+// 向后端标记通知为已读；传入通知 id 列表
+async function markNotificationsRead(ids) {
+    if (!ids || ids.length === 0) return;
+    try {
+        const res = await fetch(API_BASE + '/notifications/read', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ ids: ids })
+        });
+        if (res.ok) {
+            // 刷新通知计数
+            const data = await res.json();
+            // 拉取最新未读数并显示
+            checkNotifications();
+        }
+    } catch (err) {
+        console.error('标记通知已读失败:', err);
+    }
+}
+
+// 显示通知中心 – 列出最近通知并支持点击跳转/标记已读
+async function showNotificationCenter() {
+    if (!token || !currentUser) {
+        showToast('请先登录以查看通知', 'warning');
+        return;
+    }
+
+    try {
+        const res = await fetch(API_BASE + '/notifications', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!res.ok) return showToast('无法加载通知', 'error');
+        const notifications = await res.json();
+
+        // cache notifications for client-side filtering/pagination
+        notificationsCache = notifications || [];
+        notifCurrentPage = 1;
+
+        // render UI controls and list
+        const list = document.getElementById('notification-list');
+        const paginationEl = document.getElementById('notification-pagination');
+        list.innerHTML = '';
+        if (!notificationsCache || notificationsCache.length === 0) {
+            list.innerHTML = '<div style="color:#ccc;">暂无通知</div>';
+            if (paginationEl) paginationEl.innerHTML = '';
+        } else {
+            renderNotificationListPage();
+            renderNotificationPagination();
+        }
+
+        const center = document.getElementById('notification-center');
+        if (center) {
+            // position the center under the menubar notifications icon
+            try {
+                const icon = document.getElementById('menu-notifications');
+                if (icon) {
+                    // make visible off-screen to measure width if needed
+                    center.style.display = 'block';
+                    center.style.visibility = 'hidden';
+
+                    // measure center width
+                    const cw = center.offsetWidth || 360;
+                    const rect = icon.getBoundingClientRect();
+                    // prefer aligning center horizontally with the icon center
+                    let left = Math.round(rect.left + rect.width / 2 - cw / 2);
+                    const padding = 8;
+                    // clamp to viewport
+                    if (left < padding) left = padding;
+                    if (left + cw + padding > window.innerWidth) left = Math.max(padding, window.innerWidth - cw - padding);
+
+                    const top = Math.round(rect.bottom + 6);
+                    center.style.left = left + 'px';
+                    center.style.top = top + 'px';
+                    center.style.visibility = 'visible';
+                } else {
+                    // fallback: show at top-right
+                    center.style.display = 'block';
+                    center.style.left = '';
+                    center.style.top = '70px';
+                }
+            } catch (err) {
+                console.error('定位通知中心失败:', err);
+                center.style.display = 'block';
+            }
+        }
+
+        // wire click-outside-to-close for notification center
+        if (!window._notifCenterOutsideHandlerAdded) {
+            window._notifCenterOutsideHandler = (e) => {
+                const centerEl = document.getElementById('notification-center');
+                const icon = document.getElementById('menu-notifications');
+                if (!centerEl || centerEl.style.display !== 'block') return;
+                // do nothing when clicking inside center or on the notifications menu icon
+                if (centerEl.contains(e.target) || (icon && icon.contains(e.target))) return;
+                centerEl.style.display = 'none';
+            };
+            window.addEventListener('click', window._notifCenterOutsideHandler);
+            window._notifCenterOutsideHandlerAdded = true;
+        }
+
+        // wire custom filter dropdown and mark-all button
+        const filterBtn = document.getElementById('notification-filter-button');
+        const filterMenu = document.getElementById('notification-filter-menu');
+        if (filterBtn && filterMenu) {
+            // toggle menu
+            filterBtn.onclick = (e) => {
+                e.stopPropagation();
+                filterMenu.style.display = (filterMenu.style.display === 'block') ? 'none' : 'block';
+            };
+
+            // option clicks
+            filterMenu.querySelectorAll('.notif-filter-option').forEach(opt => {
+                opt.onclick = (ev) => {
+                    ev.stopPropagation();
+                    const v = opt.dataset.value;
+                    filterBtn.dataset.value = v;
+                    // update label text
+                    filterBtn.firstChild && (filterBtn.firstChild.textContent = opt.textContent);
+                    // fallback: update innerText (button contains text and arrow span)
+                    filterBtn.innerHTML = opt.textContent + ' <span style="opacity:0.8; font-size:12px;">▾</span>';
+                    filterMenu.style.display = 'none';
+                    notifCurrentPage = 1;
+                    renderNotificationListPage();
+                    renderNotificationPagination();
+                };
+            });
+
+            // click outside to close
+            if (!window._notifFilterOutsideHandlerAdded) {
+                window.addEventListener('click', () => {
+                    const m = document.getElementById('notification-filter-menu');
+                    if (m) m.style.display = 'none';
+                });
+                window._notifFilterOutsideHandlerAdded = true;
+            }
+        }
+
+        const markAllBtn = document.getElementById('notification-markall');
+        if (markAllBtn) markAllBtn.onclick = async () => {
+            await markAllNotificationsRead();
+            // refresh view
+            const res2 = await fetch(API_BASE + '/notifications', { headers: { 'Authorization': 'Bearer ' + token } });
+            if (res2.ok) {
+                notificationsCache = await res2.json();
+                notifCurrentPage = 1;
+                renderNotificationListPage();
+                renderNotificationPagination();
+            }
+        };
+
+    } catch (err) {
+        console.error('打开通知中心失败:', err);
+        showToast('打开通知中心失败', 'error');
+    }
+}
+
+function getFilteredNotifications() {
+    const filterBtn = document.getElementById('notification-filter-button');
+    const mode = (filterBtn && filterBtn.dataset && filterBtn.dataset.value) ? filterBtn.dataset.value : 'all';
+    if (!notificationsCache || notificationsCache.length === 0) return [];
+    if (mode === 'all') return notificationsCache.slice();
+
+    const now = Date.now();
+    let cutoff = 0;
+    if (mode === '7days') cutoff = now - (7 * 24 * 3600 * 1000);
+    if (mode === '30days') cutoff = now - (30 * 24 * 3600 * 1000);
+
+    return notificationsCache.filter(n => {
+        try {
+            const t = new Date(n.created_at).getTime();
+            return t >= cutoff;
+        } catch (e) { return false; }
+    });
+}
+
+function renderNotificationListPage() {
+    const list = document.getElementById('notification-list');
+    if (!list) return;
+    const filtered = getFilteredNotifications();
+    if (!filtered || filtered.length === 0) {
+        list.innerHTML = '<div style="color:#ccc;">暂无通知</div>';
+        return;
+    }
+
+    const pages = Math.max(1, Math.ceil(filtered.length / notifPerPage));
+    if (notifCurrentPage > pages) notifCurrentPage = pages;
+    const start = (notifCurrentPage - 1) * notifPerPage;
+    const pageItems = filtered.slice(start, start + notifPerPage);
+
+    list.innerHTML = '';
+    pageItems.forEach(n => {
+        const item = document.createElement('div');
+        item.style.padding = '8px';
+        item.style.border = '1px solid rgba(255,255,255,0.04)';
+        item.style.background = n.is_read ? 'transparent' : 'linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01))';
+        item.style.cursor = 'pointer';
+
+        const contentHtml = '<div style="font-size:12px; color:#fff;">' + escapeHtml(n.content) + '</div>' +
+            '<div style="font-size:10px; color:#ccc; margin-top:6px;">' + formatDate(n.created_at) + '</div>';
+        item.innerHTML = contentHtml;
+
+        item.addEventListener('click', async () => {
+            await openNotificationTarget(n.story_id, n.comment_id, n.id);
+            // mark locally as read
+            n.is_read = true;
+            item.style.background = 'transparent';
+        });
+
+        list.appendChild(item);
+    });
+}
+
+function renderNotificationPagination() {
+    const paginationEl = document.getElementById('notification-pagination');
+    if (!paginationEl) return;
+    const filtered = getFilteredNotifications();
+    const total = filtered.length;
+    const pages = Math.max(1, Math.ceil(total / notifPerPage));
+
+    if (pages <= 1) {
+        paginationEl.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    html += '<button class="macos3-button" ' + (notifCurrentPage <= 1 ? 'disabled style="opacity:0.5;"' : 'onclick="changeNotifPage(' + (notifCurrentPage - 1) + ')"') + '>◀</button>';
+    html += '<span style="color:#fff; margin:0 8px;">第 ' + notifCurrentPage + ' / ' + pages + ' 页</span>';
+    html += '<button class="macos3-button" ' + (notifCurrentPage >= pages ? 'disabled style="opacity:0.5;"' : 'onclick="changeNotifPage(' + (notifCurrentPage + 1) + ')"') + '>▶</button>';
+
+    paginationEl.innerHTML = html;
+}
+
+// global helper for pagination buttons
+function changeNotifPage(p) {
+    notifCurrentPage = p;
+    renderNotificationListPage();
+    renderNotificationPagination();
+}
+
+async function markAllNotificationsRead() {
+    if (!notificationsCache || notificationsCache.length === 0) return;
+    const unread = notificationsCache.filter(n => !n.is_read).map(n => n.id);
+    if (unread.length === 0) return;
+    await markNotificationsRead(unread);
+    // mark local cache
+    notificationsCache.forEach(n => { n.is_read = true; });
+    updateNotificationBadge(0);
 }
 
 function renderStories() {
@@ -328,7 +652,7 @@ async function showStoryDetail(storyId) {
         
         if (story.comments && story.comments.length > 0) {
             story.comments.forEach(c => {
-                html += '<div class="comment-item">' +
+                html += '<div id="comment-' + c.id + '" class="comment-item">' +
                     '<div class="comment-author">' + escapeHtml(c.author.username) + ' ' + c.author.avatar + '</div>' +
                     '<div class="comment-text">' + escapeHtml(c.content) + '</div>' +
                     '<div class="comment-time">' + formatDate(c.created_at) + '</div>' +

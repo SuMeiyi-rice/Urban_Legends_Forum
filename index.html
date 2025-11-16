@@ -763,6 +763,48 @@
 
     <!-- 右侧主内容区 -->
     <div class="main-content">
+        <!-- 通知中心模态（由 JS 控制显示/隐藏） -->
+        <div id="notification-center" style="display:none; position:fixed; width:360px; max-height:60vh; overflow:auto; background: #111; border:2px solid #6b0080; padding:12px; z-index:1500; box-shadow: 0 6px 18px rgba(0,0,0,0.6);">
+            <!-- 关闭按钮已移除：点击中心外部将关闭通知中心 -->
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; overflow:visible; z-index:2600;">
+                <div style="font-weight:bold; color:#fff;">📬 通知中心</div>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <!-- custom dropdown to ensure menu appears under the button -->
+                    <div id="notification-filter" style="position:relative;">
+                        <button id="notification-filter-button" class="macos3-button" data-value="all" style="background:#111; color:#fff; border:1px solid rgba(255,255,255,0.06); padding:6px 10px; font-size:12px; min-width:140px; display:flex; justify-content:space-between; align-items:center; gap:8px;">全部 <span style="opacity:0.8; font-size:12px;">▾</span></button>
+                        <div id="notification-filter-menu" style="display:none; position:absolute; top:calc(100% + 6px); right:0; background:#111; border:1px solid rgba(255,255,255,0.06); min-width:160px; z-index:2800; box-shadow:0 6px 12px rgba(0,0,0,0.6);">
+                            <div class="notif-filter-option" data-value="all" style="padding:8px; color:#fff; cursor:pointer;">全部</div>
+                            <div class="notif-filter-option" data-value="7days" style="padding:8px; color:#fff; cursor:pointer;">过去 7 天</div>
+                            <div class="notif-filter-option" data-value="30days" style="padding:8px; color:#fff; cursor:pointer;">过去 30 天</div>
+                        </div>
+                    </div>
+                    <button id="notification-markall" class="macos3-button" style="font-size:11px;">全部已读</button>
+                </div>
+            </div>
+
+            <div id="notification-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+
+            <!-- 分页容器（由 JS 渲染） -->
+            <div id="notification-pagination" style="margin-top:10px; display:flex; justify-content:center; gap:6px; align-items:center;"></div>
+        </div>
+
+        <style>
+        /* highlight 动画用于跳转到特定评论时短暂闪烁 */
+        .comment-highlight {
+            animation: comment-pulse 1.6s ease-in-out;
+            box-shadow: 0 0 12px 3px rgba(255,200,50,0.14);
+            border-left: 4px solid #ffcc33;
+        }
+        @keyframes comment-pulse {
+            0% { background-color: rgba(255,255,0,0.06); }
+            50% { background-color: rgba(255,255,0,0.18); }
+            100% { background-color: transparent; }
+        }
+
+        /* 通知弹出样式（JS 动态插入） */
+        .notification-popup { cursor: pointer; }
+        </style>
             <!-- 标题窗口 -->
             <div class="macos3-window">
                 <div class="window-titlebar active">

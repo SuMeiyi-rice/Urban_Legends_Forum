@@ -439,82 +439,272 @@ def generate_evidence_image(story_title, story_content, comment_context=""):
                 model_id = os.getenv('DIFFUSION_MODEL', 'runwayml/stable-diffusion-v1-5')
                 
                 # 智能分析故事内容 + 评论内容，生成与故事直接相关的真实场景
-                story_text = (story_title + " " + story_content[:200]).lower()
-                # 加入评论和贴文的关键词
+                story_text = (story_title + " " + story_content[:300]).lower()
+                # 加入评论和贴文的关键词 - 权重更高
+                comment_text = ""
                 if comment_context:
-                    story_text += " " + comment_context.lower()
+                    comment_text = comment_context.lower()
+                    story_text += " " + comment_text
                 
-                print(f"[generate_evidence_image] 分析内容: {story_text[:150]}...")
+                print(f"[generate_evidence_image] 分析故事: {story_text[:150]}...")
+                if comment_text:
+                    print(f"[generate_evidence_image] 评论线索: {comment_text[:100]}...")
                 
                 # 从故事中提取关键场景元素（包括评论中的关键词）
                 scene_keywords = {
-                    # 地铁相关
-                    'subway': ['subway train interior with empty seats', 'subway station platform', 'metro train car'],
-                    '地铁': ['subway train interior with empty seats', 'subway station platform at night', 'metro corridor'],
-                    '车厢': ['train car interior, seats and handrails', 'empty subway carriage'],
+                    # 地铁相关 - 优先级最高，因为这个场景最具体
+                    'subway': {
+                        'scenes': ['subway train interior with empty seats', 'subway station platform', 'metro train car at night'],
+                        'details': ['汽车灯影、月台空荡、车厢诡异', '13号车厢、车号显示屏、月台电子钟']
+                    },
+                    '地铁': {
+                        'scenes': ['subway train interior with empty seats', 'subway station platform at night', 'metro corridor'],
+                        'details': ['地铁内部、乘客、诡异']
+                    },
+                    '车厢': {
+                        'scenes': ['train car interior, seats and handrails', 'empty subway carriage at night'],
+                        'details': ['车厢内部、座位、寂静']
+                    },
                     
                     # 镜子相关
-                    'mirror': ['bathroom with mirror and sink', 'bedroom mirror on dresser', 'mirror on bathroom wall'],
-                    '镜子': ['bathroom mirror above sink, faucet visible', 'bedroom mirror with dresser'],
-                    '浴室': ['residential bathroom, mirror, sink, tiles', 'bathroom interior with bathtub'],
+                    'mirror': {
+                        'scenes': ['bathroom with mirror and sink', 'bedroom mirror on dresser', 'mirror reflection at night'],
+                        'details': ['镜子倒影、诡异表情']
+                    },
+                    '镜子': {
+                        'scenes': ['bathroom mirror above sink, faucet visible', 'bedroom mirror with dresser'],
+                        'details': ['镜中倒影不是自己、诡异笑容']
+                    },
+                    '倒影': {
+                        'scenes': ['mirror reflection, distorted face', 'window reflection at night'],
+                        'details': ['倒影、非本人、诡异']
+                    },
                     
                     # 门相关  
-                    'door': ['apartment door with peephole and handle', 'residential hallway with doors'],
-                    '门': ['apartment door, door handle, peephole', 'residential building hallway'],
-                    '敲门': ['apartment entrance door closeup', 'door with door number plate'],
+                    'door': {
+                        'scenes': ['apartment door with peephole and handle', 'residential hallway with doors'],
+                        'details': ['敲门、门号、诡异']
+                    },
+                    '门': {
+                        'scenes': ['apartment door, door handle, peephole', 'residential building hallway'],
+                        'details': ['门、猫眼、敲门声']
+                    },
+                    '敲门': {
+                        'scenes': ['apartment entrance door closeup', 'door with door number plate at night'],
+                        'details': ['有人敲门、门号、时间']
+                    },
                     
                     # 楼道相关
-                    'hallway': ['apartment building corridor', 'residential stairwell'],
-                    '走廊': ['apartment building hallway with doors', 'residential corridor with lighting'],
-                    '楼道': ['apartment stairwell, concrete steps', 'building corridor with elevator'],
-                    '楼梯': ['residential building staircase, handrails', 'stairwell in apartment building'],
+                    'hallway': {
+                        'scenes': ['apartment building corridor', 'residential stairwell'],
+                        'details': ['楼道、走廊、昏暗']
+                    },
+                    '走廊': {
+                        'scenes': ['apartment building hallway with doors', 'residential corridor with lighting'],
+                        'details': ['走廊、灯光、脚步声']
+                    },
+                    '楼道': {
+                        'scenes': ['apartment stairwell, concrete steps', 'building corridor with elevator'],
+                        'details': ['楼梯、电梯、诡异']
+                    },
+                    '楼梯': {
+                        'scenes': ['residential building staircase, handrails', 'stairwell in apartment building at night'],
+                        'details': ['阶梯、灯光、脚步']
+                    },
                     
                     # 窗户相关
-                    'window': ['apartment window view at night', 'window with curtains'],
-                    '窗': ['residential window from inside', 'apartment window'],
+                    'window': {
+                        'scenes': ['apartment window view at night', 'window with curtains'],
+                        'details': ['窗外、月亮、人影']
+                    },
+                    '窗': {
+                        'scenes': ['residential window from inside', 'apartment window at night'],
+                        'details': ['窗外、诡异、人影']
+                    },
+                    '窗外': {
+                        'scenes': ['window view from apartment at night', 'dark window with city lights'],
+                        'details': ['窗外景象、诡异、月光']
+                    },
                     
                     # 房间相关
-                    '卧室': ['bedroom interior, bed and furniture', 'residential bedroom at night'],
-                    '客厅': ['living room with sofa and tv', 'apartment living room'],
-                    '厨房': ['residential kitchen, appliances', 'apartment kitchen interior'],
+                    '卧室': {
+                        'scenes': ['bedroom interior, bed and furniture', 'residential bedroom at night'],
+                        'details': ['卧室、床、昏暗']
+                    },
+                    '房间': {
+                        'scenes': ['residential room interior at night', 'apartment bedroom'],
+                        'details': ['房间、诡异、阴影']
+                    },
+                    '床': {
+                        'scenes': ['bedroom bed under dim light', 'bed with sheets and pillows'],
+                        'details': ['床、睡眠、诡异']
+                    },
                     
-                    # 其他场景
-                    '手机': ['smartphone screen in dark', 'phone camera viewfinder'],
-                    '电话': ['old telephone on table', 'phone in dark room'],
-                    '照片': ['photograph lying on table', 'old photo on desk'],
-                    '笔记': ['handwritten note on paper', 'notebook page with writing'],
+                    # 其他诡异场景
+                    '手机': {
+                        'scenes': ['smartphone screen in dark', 'phone screen in hand'],
+                        'details': ['屏幕、拍照、证据']
+                    },
+                    '照片': {
+                        'scenes': ['photograph on table', 'old photo or polaroid'],
+                        'details': ['照片、证据、诡异']
+                    },
+                    '录音': {
+                        'scenes': ['phone recording screen', 'audio device'],
+                        'details': ['录音、语音、证据']
+                    },
+                    '笔记': {
+                        'scenes': ['handwritten note on paper', 'notebook page with writing'],
+                        'details': ['笔记、文字、线索']
+                    },
+                    '时间': {
+                        'scenes': ['clock showing strange time', 'digital display at night'],
+                        'details': ['时间、诡异数字、不寻常']
+                    },
                     
-                    # 更多具体场景 - 包含用户可能评论的内容
-                    '床': ['bedroom bed under dim light', 'bed with sheets and pillows'],
-                    '沙发': ['living room sofa in dark', 'couch in apartment'],
-                    '窗帘': ['window with closed curtains', 'dark curtains on window'],
-                    '天花板': ['apartment ceiling detail', 'ceiling in dark room'],
-                    '地板': ['wooden floor in dim light', 'apartment floor detail'],
-                    '角落': ['apartment corner in shadow', 'room corner at night'],
-                    '影子': ['shadow on wall in dark', 'mysterious shadow in room'],
-                    '脚步': ['empty hallway floor', 'stairwell steps'],
-                    '声音': ['empty room interior', 'residential space at night'],
-                    '冷': ['frost on window', 'cold apartment interior'],
-                    '热': ['humid bathroom interior', 'steamy mirror'],
+                    # 诡异氛围
+                    '影子': {
+                        'scenes': ['shadow on wall in dark', 'mysterious shadow in room'],
+                        'details': ['影子、人影、诡异']
+                    },
+                    '脚步': {
+                        'scenes': ['empty hallway floor', 'stairwell steps at night'],
+                        'details': ['地面、脚步声、诡异']
+                    },
+                    '声音': {
+                        'scenes': ['empty room interior at night', 'residential space interior'],
+                        'details': ['房间内、声音、诡异']
+                    },
+                    '冷': {
+                        'scenes': ['cold apartment interior', 'frost on window'],
+                        'details': ['寒冷、冻气、诡异']
+                    },
+                    '诡异': {
+                        'scenes': ['dimly lit urban apartment', 'creepy residential space'],
+                        'details': ['诡异、阴影、不寻常']
+                    },
                 }
                 
-                # 匹配场景描述 - 优先级匹配
+                # 多层级匹配场景描述 - 优先匹配评论中的关键词
                 scene_desc = None
+                scene_details = ""
                 matched_keyword = None
-                for keyword, descriptions in scene_keywords.items():
-                    if keyword in story_text:
-                        scene_desc = random.choice(descriptions)
-                        matched_keyword = keyword
-                        print(f"[generate_evidence_image] 匹配关键词: {keyword} -> {scene_desc}")
-                        break
+                
+                # 第一优先级：匹配评论中的关键词（用户补充的信息）
+                if comment_text:
+                    for keyword, scene_data in scene_keywords.items():
+                        if keyword in comment_text:
+                            scene_desc = random.choice(scene_data.get('scenes', ['dimly lit apartment']))
+                            scene_details = random.choice(scene_data.get('details', ['']))
+                            matched_keyword = keyword
+                            print(f"[generate_evidence_image] 从评论匹配: {keyword} -> {scene_desc}")
+                            break
+                
+                # 第二优先级：匹配故事标题和内容
+                if not scene_desc:
+                    for keyword, scene_data in scene_keywords.items():
+                        if keyword in story_text:
+                            scene_desc = random.choice(scene_data.get('scenes', ['dimly lit apartment']))
+                            scene_details = random.choice(scene_data.get('details', ['']))
+                            matched_keyword = keyword
+                            print(f"[generate_evidence_image] 从故事匹配: {keyword} -> {scene_desc}")
+                            break
                 
                 # 如果没有匹配，使用通用场景
                 if not scene_desc:
                     scene_desc = 'dimly lit urban apartment interior, everyday furniture'
+                    scene_details = '诡异、不寻常的氛围'
                     print(f"[generate_evidence_image] 使用默认场景")
                 
-                # 纪实照片风格的 prompt - 真实场景中融入微妙恐怖元素
-                # 关键：不明显但令人不安，仔细看才能发现诡异细节
+                # 纪实照片风格的 prompt - 真实场景中融入故事特定的诡异元素
+                # 提取显性细节（引号内短语、数字编号、时间、地点关键词），并把它们直接加入到 prompt
+                explicit_details = []
+                # 从原始故事/评论文本中提取引号内短语
+                try:
+                    quoted = re.findall(r'“([^”]+)”|"([^"]+)"|‘([^’]+)’|\'([^\']+)\'', story_text)
+                    for tup in quoted:
+                        for part in tup:
+                            if part:
+                                explicit_details.append(part)
+                except Exception:
+                    pass
+
+                # 提取常见的数字+单位（如 13号、3层、3点等）和时间格式
+                try:
+                    nums = re.findall(r"\d+[号节层楼点分钟分秒]?", story_text)
+                    explicit_details.extend(nums)
+                except Exception:
+                    pass
+
+                # 添加 title 以增强提示的语义相关性
+                if isinstance(story_title, str) and story_title.strip():
+                    explicit_details.append(story_title.strip())
+
+                # 去重并限制数量
+                seen = set()
+                filtered_details = []
+                for d in explicit_details:
+                    dd = d.strip()
+                    if not dd:
+                        continue
+                    if dd in seen:
+                        continue
+                    seen.add(dd)
+                    filtered_details.append(dd)
+                    if len(filtered_details) >= 6:
+                        break
+                explicit_details_text = ", ".join(filtered_details)
+
+                # 将显性细节映射为更明确的视觉短语（中文->英文视觉描述）以提高图像的强关联性
+                visual_map = {
+                    # 地点 / 标题相关
+                    '金鱼街斗鱼': 'fish tank in small pet shop, visible aquariums and signage',
+                    '地铁': 'subway interior or platform, visible carriage number display',
+                    '13号': 'carriage number 13 on digital display',
+                    '13号车厢': 'train carriage labeled 13 on display',
+                    '地铁2号线': 'metro line 2 signage, platform signs',
+                    # 声音相关（转换为可视线索，如水波、玻璃振动等）
+                    '砰砰声': 'water ripple marks on aquarium glass, visible impact ripples',
+                    '敲鱼缸': 'closeup of aquarium glass with impact marks, chipped paint',
+                    '敲门': 'door with knock marks and peephole, nighttime hallway',
+                    '脚步声': 'scuffed floor and footprints in dim hallway',
+                    '声音': 'sound source implied by movement in curtains or ripples on water',
+                    '声响': 'vibrations or visible disturbance on surfaces',
+                    '凌晨3点': 'digital clock showing 03:00, dark night lighting',
+                    '3点': 'digital clock showing 03:00',
+                    '镜子': 'bathroom mirror with faint reflection, smudge or handprint',
+                    '倒影': 'reflection in glass showing a different face',
+                    '鱼缸': 'fish tank with visible water, algae, and glass reflections',
+                    '照片': 'polaroid-style photograph laying on a table',
+                    '录音': 'phone recording screen or audio recorder device visible',
+                    '窗外': 'view through window with streetlights or moonlight',
+                    '门': 'apartment door with visible handle and peephole',
+                }
+
+                visual_phrases = []
+                for d in filtered_details:
+                    key = d
+                    # 简单归一化数词，例如含数字的短语
+                    if any(ch.isdigit() for ch in key) and key not in visual_map:
+                        # map '13号' -> 'number 13 signage'
+                        visual_phrases.append(f"signage or digits: {key}")
+                        continue
+                    mapped = visual_map.get(key)
+                    if mapped:
+                        visual_phrases.append(mapped)
+                    else:
+                        # 试着把中文短语原样放入，但转换成提示友好的形式
+                        visual_phrases.append(f"visual cue: {key}")
+
+                visual_phrases_text = ", ".join(visual_phrases)
+
+                # 关键：将显性视觉短语放在 prompt 中的显著位置，便于生成与正文紧密相关的图像
+                extra_section = ""
+                if visual_phrases_text:
+                    extra_section = f", include visual elements: {visual_phrases_text}"
+                    if explicit_details_text:
+                        extra_section += f" (keywords: {explicit_details_text})"
+
                 prompt = (
                     f"realistic photograph, {scene_desc}, "
                     f"taken with smartphone camera at night, "
@@ -523,9 +713,11 @@ def generate_evidence_image(story_title, story_content, comment_context=""):
                     f"real world scene, photographic evidence style, "
                     f"visible details and textures, concrete objects, "
                     f"documentary photo aesthetic, "
+                    f"{scene_details}, "
                     f"subtle creepy atmosphere, barely visible face in shadow, "
                     f"inexplicable shadow, eerie presence, "
                     f"something unsettling about this place, hidden disturbing details"
+                    f"{extra_section}"
                 )
                 
                 # 负面提示词 - 避免太扭曲/太抽象，但保留微妙恐怖
@@ -564,70 +756,77 @@ def generate_evidence_image(story_title, story_content, comment_context=""):
                     num_steps = 20  # 更多步数确保质量
                     img_size = 512  # 直接生成512x512，无需放大
                 
-                # 生成图片 - 始终生成512x512正方形
-                image = pipe(
-                    prompt,
-                    negative_prompt=negative_prompt,
-                    num_inference_steps=num_steps,  # CPU: 20步, GPU: 25步
-                    guidance_scale=8.5,  # 提高guidance提升细节
-                    height=img_size,
-                    width=img_size
-                ).images[0]
-                
-                # 确保输出是512x512的正方形（防止拉伸）
-                if image.size != (512, 512):
-                    image = image.resize((512, 512), Image.Resampling.LANCZOS)  # 使用LANCZOS保持细节
-                
-                # 后处理：模拟手机拍摄效果，保持清晰度
-                # 1. 轻微降低饱和度（保持真实感）
-                from PIL import ImageEnhance
-                enhancer = ImageEnhance.Color(image)
-                image = enhancer.enhance(0.85)  # 保持85%饱和度
-                
-                # 2. 调整亮度（保持细节可见）
-                enhancer = ImageEnhance.Brightness(image)
-                image = enhancer.enhance(0.85)  # 轻微变暗
-                
-                # 3. 适度增加对比度
-                enhancer = ImageEnhance.Contrast(image)
-                image = enhancer.enhance(1.15)  # 适度提高对比度
-                
-                # 4. 保持锐度
-                enhancer = ImageEnhance.Sharpness(image)
-                image = enhancer.enhance(1.1)  # 轻微提升锐度
-                
-                # 5. 添加极轻微噪点（模拟夜拍）
-                import numpy as np
-                img_array = np.array(image)
-                noise = np.random.normal(0, 3, img_array.shape)  # 极轻微噪点
-                img_array = np.clip(img_array + noise, 0, 255).astype(np.uint8)
-                image = Image.fromarray(img_array)
-                
-                # 6. 添加监控录像样式的时间戳（右下角，类似图片中的样式）
-                from PIL import ImageDraw, ImageFont
-                draw = ImageDraw.Draw(image)
-                
-                # 生成随机日期（过去30天内）
-                days_ago = random.randint(1, 30)
-                fake_date = datetime.now() - timedelta(days=days_ago)
-                timestamp_text = fake_date.strftime('%Y/%m/%d %H:%M:%S')
-                
-                try:
-                    # 右下角时间戳（白色，模拟监控录像）
-                    draw.text((340, 480), timestamp_text, fill=(220, 220, 220))
-                    # 左上角简单标记
-                    draw.text((10, 10), f"REC ●", fill=(200, 0, 0))
-                except:
-                    pass
-                
-                # 保存
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                filename = f"evidence_{timestamp}.png"
-                filepath = f"static/generated/{filename}"
-                image.save(filepath)
-                
-                print(f"[generate_evidence_image] ✅ Stable Diffusion 图片已生成: {filepath}")
-                return f"/generated/{filename}"
+                # 生成图片 - 使用多模板以提高沉浸感：primary / closeup / wide/source
+                templates = []
+                # primary = base prompt
+                templates.append(('primary', prompt))
+
+                # close-up 模板：强调细节、特写
+                closeup_prompt = prompt + ", close-up detail shot, shallow depth of field, focus on details"
+                if 'visual_phrases_text' in locals() and visual_phrases_text:
+                    closeup_prompt += f", emphasize: {visual_phrases_text}"
+                templates.append(('closeup', closeup_prompt))
+
+                # wide/source 模板：展示环境或疑似声音源近景
+                source_prompt = prompt + ", wide shot showing surrounding environment, contextual background, show suspected sound source"
+                if 'visual_phrases_text' in locals() and visual_phrases_text:
+                    source_prompt += f", highlight object: {visual_phrases_text}"
+                templates.append(('source', source_prompt))
+
+                # 生成并保存多张图片，返回 primary 的路径以兼容旧接口
+                timestamp_base = datetime.now().strftime('%Y%m%d_%H%M%S')
+                saved_files = []
+                for idx, (suffix, p) in enumerate(templates):
+                    print(f"[generate_evidence_image] 生成模板[{suffix}] Prompt: {p[:120]}...")
+                    image = pipe(
+                        p,
+                        negative_prompt=negative_prompt,
+                        num_inference_steps=num_steps,
+                        guidance_scale=8.5,
+                        height=img_size,
+                        width=img_size
+                    ).images[0]
+
+                    # 确保输出是512x512
+                    if image.size != (512, 512):
+                        image = image.resize((512, 512), Image.Resampling.LANCZOS)
+
+                    # 后处理（与之前相同）
+                    from PIL import ImageEnhance, ImageDraw, ImageFont
+                    enhancer = ImageEnhance.Color(image)
+                    image = enhancer.enhance(0.85)
+                    enhancer = ImageEnhance.Brightness(image)
+                    image = enhancer.enhance(0.85)
+                    enhancer = ImageEnhance.Contrast(image)
+                    image = enhancer.enhance(1.15)
+                    enhancer = ImageEnhance.Sharpness(image)
+                    image = enhancer.enhance(1.1)
+
+                    import numpy as np
+                    img_array = np.array(image)
+                    noise = np.random.normal(0, 3, img_array.shape)
+                    img_array = np.clip(img_array + noise, 0, 255).astype(np.uint8)
+                    image = Image.fromarray(img_array)
+
+                    draw = ImageDraw.Draw(image)
+                    days_ago = random.randint(1, 30)
+                    fake_date = datetime.now() - timedelta(days=days_ago)
+                    timestamp_text = fake_date.strftime('%Y/%m/%d %H:%M:%S')
+                    try:
+                        draw.text((340, 480), timestamp_text, fill=(220, 220, 220))
+                        draw.text((10, 10), f"REC ●", fill=(200, 0, 0))
+                    except:
+                        pass
+
+                    filename = f"evidence_{timestamp_base}_{suffix}.png"
+                    filepath = f"static/generated/{filename}"
+                    image.save(filepath)
+                    saved_files.append((suffix, f"/generated/{filename}"))
+                    print(f"[generate_evidence_image] ✅ Stable Diffusion 图片已生成: {filepath}")
+
+                # 返回 primary 的相对路径以兼容现有调用
+                primary_path = next((p for s, p in saved_files if s == 'primary'), saved_files[0][1])
+                return primary_path
                 
             except Exception as sd_error:
                 print(f"[generate_evidence_image] Stable Diffusion 失败: {sd_error}")
@@ -1109,7 +1308,7 @@ def generate_evidence_audio(text_content, story_context=""):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         return f"/generated/audio_placeholder_{timestamp}.mp3"
 
-def generate_ai_response(story, user_comment):
+def generate_ai_response(story, user_comment, previous_ai_responses=None):
     """Generate AI chatbot response to user comment"""
     
     # Check if LM Studio local server is configured
@@ -1123,13 +1322,6 @@ def generate_ai_response(story, user_comment):
             import subprocess
             import json
             
-            # 获取该故事下之前的AI回复，维持对话连贯性
-            from models import Comment
-            previous_ai_responses = Comment.query.filter_by(
-                story_id=story.id,
-                is_ai_response=True
-            ).order_by(Comment.created_at.desc()).limit(3).all()
-            
             # 构建历史对话上下文
             history_context = ""
             if previous_ai_responses:
@@ -1139,7 +1331,7 @@ def generate_ai_response(story, user_comment):
                     clean_reply = prev_comment.content.replace("【楼主回复】", "").strip()
                     history_parts.append(f"- {clean_reply}")
                 history_context = "\n".join(history_parts)
-                print(f"[generate_ai_response] 找到 {len(previous_ai_responses)} 条历史回复")
+                print(f"[generate_ai_response] 获得 {len(previous_ai_responses)} 条历史回复")
             
             system_prompt = """你是"楼主"，这个都市传说帖子的发起人。
 
@@ -1330,7 +1522,23 @@ def generate_ai_response(story, user_comment):
                 traceback.print_exc()
             
             print("[generate_ai_response] 回退到模板回复")
+            
+            # ⚠️ 重要：如果USE_LM_STUDIO=true但失败，应该使用模板而不是尝试其他API
+            # 这样避免无意中调用云API
+            import random
+            responses = [
+                f"【楼主回复】谢谢！我刚才又去了一趟...情况比我想象的更诡异。我现在不太敢深入调查了，但又放不下。",
+                f"【楼主回复】说实话，我现在有点怕...刚才发生的事完全超出我理解范围。有没有人遇到过类似的？",
+                f"【楼主回复】更新：今天又有新发现了，这事儿越查越不对劲。有懂行的朋友能帮我分析一下吗？",
+                f"【楼主回复】感谢支持！我也在犹豫要不要继续...但好奇心让我停不下来。等有新进展再更新。",
+                f"【楼主回复】刚去现场拍了照，但手机一直卡，几张都拍糊了...这也太巧了吧？我越想越不对劲。",
+                f"【楼主回复】你说的有道理...我也想过这种可能。但还有些细节对不上，我再观察观察。",
+                f"【楼主回复】兄弟你也遇到过？！那你后来怎么处理的？我现在真的不知道该怎么办了。",
+                f"【楼主回复】我也希望只是巧合...但这几天发生的事太多了。昨晚又听到那个声音了，我录音了但是...算了，等我整理一下再发。"
+            ]
+            return random.choice(responses)
     
+    # ⚠️ 只有在显式禁用LM Studio时，才尝试其他API
     # Check if cloud API keys are configured
     openai_key = os.getenv('OPENAI_API_KEY', '')
     anthropic_key = os.getenv('ANTHROPIC_API_KEY', '')
@@ -1357,13 +1565,7 @@ def generate_ai_response(story, user_comment):
         return random.choice(responses)
     
     try:
-        # 获取历史AI回复以保持一致性（OpenAI/Anthropic fallback分支）
-        from models import Comment
-        previous_ai_responses = Comment.query.filter_by(
-            story_id=story.id,
-            is_ai_response=True
-        ).order_by(Comment.created_at.desc()).limit(3).all()
-        
+        # 构建历史对话上下文
         history_context = ""
         if previous_ai_responses:
             history_parts = [f"- {c.content.replace('【楼主回复】', '').strip()}" 

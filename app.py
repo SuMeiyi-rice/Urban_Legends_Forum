@@ -91,11 +91,9 @@ def init_default_stories():
                 'content': '''昨晚加班到凌晨，赶最后一班地铁回家。车厢里只有零星几个人，我坐在靠门的位置刷手机。
 
 列车停靠在"老街站"时，我无意间抬头看了一眼站台显示屏——上面显示这是"13号车厢"。
-
 可是我明明记得这条线路只有12节车厢...
 
 我环顾四周，发现其他乘客都低着头，一动不动。窗外的站台空无一人，但月台上的电子钟显示的时间是"25:73"。
-
 车门缓缓关上，列车继续前行。我想站起来走到其他车厢，但双腿像灌了铅一样沉重。
 
 最诡异的是，我发现窗户上倒映着我的脸，但表情却不是我现在的样子——镜中的我在笑，笑得很诡异...
@@ -477,7 +475,14 @@ def delayed_ai_response(story_id, comment_id, delay_seconds=60):
         
         print(f"[delayed_ai_response] 调用 generate_ai_response...")
         from ai_engine import generate_ai_response
-        ai_response = generate_ai_response(story, comment)
+        
+        # 获取该故事的历史AI回复
+        previous_ai_responses = Comment.query.filter_by(
+            story_id=story_id,
+            is_ai_response=True
+        ).order_by(Comment.created_at.desc()).limit(3).all()
+        
+        ai_response = generate_ai_response(story, comment, previous_ai_responses)
         print(f"[delayed_ai_response] AI回复生成完成: {ai_response[:50]}..." if ai_response else "[delayed_ai_response] AI回复为空!")
         
         if ai_response:
@@ -506,7 +511,15 @@ def delayed_ai_response(story_id, comment_id, delay_seconds=60):
             db.session.commit()
 
 def generate_evidence_for_story(story_id, trigger_comment_id=None):
-    """为故事生成证据（图片和音频）"""
+    """为故事生成证据（图片和音频）- 根据故事内容智能调整证据类型
+    
+    有声音关键词的故事：
+    - 首次及以后每次生成1个音频
+    - 当音频总数达到3或3的倍数时，额外生成1张图片
+    
+    无声音关键词的故事：
+    - 每次生成1张图片
+    """
     print(f"[generate_evidence_for_story] 开始为故事 ID={story_id} 生成证据...")
     
     with app.app_context():
@@ -517,57 +530,131 @@ def generate_evidence_for_story(story_id, trigger_comment_id=None):
         
         from ai_engine import generate_evidence_image, generate_evidence_audio
         
+        # 检测故事中是否提到声音相关内容
+        sound_keywords = [
+            '声音', '声响', '敲', '敲门', '敲击', '敲打', '砰', '咚', '嘎吱', '尖叫',
+            '哭声', '笑声', '呼吸', '脚步', '脚步声', '呼救', '求救', '呼喊', '说话',
+            '耳鸣', '异响', '诡异声', '怪声', '鬼哭', '风声', '水流', '滴答', '咔',
+            '铃声', '铃', '警报', '打鼾', '打呼', '录音', '录音笔', '录音机', 
+            'sound', 'noise', 'scream', 'voice', 'whisper', 'knock'
+        ]
+        
+        # 将故事标题和内容转换为小写来检查关键词
+        full_text = (story.title + " " + story.content + " " + 
+                    (Comment.query.filter_by(story_id=story_id, is_ai_response=False)
+                     .with_entities(Comment.content).all()
+                     and " ".join([c[0] for c in Comment.query.filter_by(story_id=story_id, is_ai_response=False)
+                                   .with_entities(Comment.content).all()]) or "")).lower()
+        
+        # 检测是否包含声音关键词
+        has_sound_keyword = any(keyword in full_text for keyword in sound_keywords)
+        
+        print(f"[generate_evidence_for_story] 声音关键词检测: {'有' if has_sound_keyword else '无'}")
+        
+        # 获取当前证据统计
+        total_evidence_count = Evidence.query.filter_by(story_id=story_id).count()
+        audio_evidence_count = Evidence.query.filter_by(story_id=story_id, evidence_type='audio').count()
+        image_evidence_count = Evidence.query.filter_by(story_id=story_id, evidence_type='image').count()
+        
+        print(f"[generate_evidence_for_story] 当前证据: 总计{total_evidence_count}个 (音频{audio_evidence_count}个, 图片{image_evidence_count}个)")
+        
         # 优先使用触发生成的最新评论，其次是其他评论
         comment_context = ""
         if trigger_comment_id:
             trigger_comment = Comment.query.get(trigger_comment_id)
             if trigger_comment and not trigger_comment.is_ai_response:
-                comment_context = trigger_comment.content + " "  # 最新评论优先
+                comment_context = trigger_comment.content + " "
                 print(f"[generate_evidence_for_story] 使用触发评论: {trigger_comment.content[:50]}...")
         
         # 添加其他用户评论作为补充上下文
         other_comments = [c.content for c in story.comments if not c.is_ai_response and c.id != trigger_comment_id]
-        comment_context += " ".join(other_comments[:4])  # 再加4条其他评论
+        comment_context += " ".join(other_comments[:4])
         
-        # 每次只生成1张图片证据
-        print(f"[generate_evidence_for_story] 生成图片证据 (1张)...")
-        image_path = generate_evidence_image(
-            story.title,
-            story.content,
-            comment_context
-        )
-        
-        if image_path:
-            evidence = Evidence(
-                story_id=story_id,
-                evidence_type='image',
-                file_path=image_path,
-                description="现场拍摄 - 基于网友反馈"
+        # ===== 策略1：有声音关键词的故事 =====
+        if has_sound_keyword:
+            print(f"[generate_evidence_for_story] 🔊 检测到声音元素 - 生成音频证据")
+            
+            # 生成1个音频证据
+            print(f"[generate_evidence_for_story] 生成音频证据...")
+            audio_path = generate_evidence_audio(
+                f"{story.title}\n{story.content[:200]}\n{comment_context[:100]}"
             )
-            db.session.add(evidence)
-            print(f"[generate_evidence_for_story] ✅ 图片证据已生成: {image_path}")
+            
+            if audio_path:
+                evidence = Evidence(
+                    story_id=story_id,
+                    evidence_type='audio',
+                    file_path=audio_path,
+                    description=f"现场录音 - 诡异声响证据"
+                )
+                db.session.add(evidence)
+                db.session.commit()  # 立即提交以更新计数
+                print(f"[generate_evidence_for_story] ✅ 音频证据已生成: {audio_path}")
+                
+                # 更新计数
+                audio_evidence_count = Evidence.query.filter_by(story_id=story_id, evidence_type='audio').count()
+                print(f"[generate_evidence_for_story] 当前音频证据总数: {audio_evidence_count}")
+                
+                # 检查是否需要生成图片（当音频数达到3或3的倍数时）
+                if audio_evidence_count > 0 and audio_evidence_count % 3 == 0:
+                    print(f"[generate_evidence_for_story] 🔊 音频证据达到{audio_evidence_count}个（3的倍数），生成图片辅助...")
+                    
+                    image_path = generate_evidence_image(
+                        story.title,
+                        story.content,
+                        comment_context
+                    )
+                    
+                    if image_path:
+                        evidence = Evidence(
+                            story_id=story_id,
+                            evidence_type='image',
+                            file_path=image_path,
+                            description=f"现场拍摄 - 第{audio_evidence_count//3}组补充证据"
+                        )
+                        db.session.add(evidence)
+                        db.session.commit()
+                        print(f"[generate_evidence_for_story] ✅ 图片证据已生成: {image_path}")
+                        
+                        # 更新故事内容
+                        story.content += f"\n\n【证据组合更新 #{audio_evidence_count//3}】\n我录了{audio_evidence_count}段音频，拍了张现场照片。这组证据能说明问题吗？"
+                    else:
+                        # 只更新故事，不生成图片
+                        story.content += f"\n\n【音频证据更新】\n我已经录了{audio_evidence_count}段音频了。声音真的很诡异..."
+                else:
+                    # 仅生成音频，不生成图片
+                    story.content += f"\n\n【音频证据更新】\n我又录了一段音频，这是第{audio_evidence_count}段了..."
+            
+            story.updated_at = datetime.utcnow()
+            db.session.commit()
         
-        # 生成1个音频证据
-        print(f"[generate_evidence_for_story] 生成音频证据...")
-        audio_path = generate_evidence_audio(
-            f"{story.title}\n{story.content[:200]}"
-        )
-        
-        if audio_path:
-            evidence = Evidence(
-                story_id=story_id,
-                evidence_type='audio',
-                file_path=audio_path,
-                description="现场录音 - 诡异环境音"
+        # ===== 策略2：无声音关键词的故事 =====
+        else:
+            print(f"[generate_evidence_for_story] 📸 仅视觉元素 - 生成图片证据")
+            
+            # 生成1张图片证据
+            print(f"[generate_evidence_for_story] 生成图片证据...")
+            image_path = generate_evidence_image(
+                story.title,
+                story.content,
+                comment_context
             )
-            db.session.add(evidence)
-            print(f"[generate_evidence_for_story] ✅ 音频证据已生成: {audio_path}")
-        
-        # 更新故事内容，添加证据说明
-        story.content += "\n\n【证据更新】\n根据大家的反馈，我回到现场又拍了张照片，还录了音。你们自己看吧...我现在真的很害怕。"
-        story.updated_at = datetime.utcnow()
-        
-        db.session.commit()
+            
+            if image_path:
+                evidence = Evidence(
+                    story_id=story_id,
+                    evidence_type='image',
+                    file_path=image_path,
+                    description="现场拍摄 - 基于网友反馈"
+                )
+                db.session.add(evidence)
+                print(f"[generate_evidence_for_story] ✅ 图片证据已生成: {image_path}")
+                
+                # 更新故事内容
+                story.content += "\n\n【证据更新】\n根据大家的反馈，我又仔细观察了一遍。拍了这张照片，你们看看有没有发现什么异常..."
+            
+            story.updated_at = datetime.utcnow()
+            db.session.commit()
         
         # 通知所有关注者
         followers = Follow.query.filter_by(story_id=story_id).all()
