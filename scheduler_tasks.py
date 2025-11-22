@@ -100,20 +100,20 @@ def start_scheduler(app):
         replace_existing=True
     )
     
-    # 【新功能】每30分钟生成2条新帖
+    # 【新功能】每20分钟生成2条新帖
     scheduler.add_job(
         func=scheduled_story_generation,
         trigger='interval',
-        minutes=30,
-        id='story_generation_30min',
-        name='Generate 2 stories every 30 minutes',
+        minutes=20,
+        id='story_generation_20min',
+        name='Generate 2 stories every 20 minutes',
         replace_existing=True
     )
     
     print("✅ Background scheduler started!")
     print(f"   - 📅 Noon story refresh: every day at 11:59")
     print(f"   - 📅 Night story refresh: every day at 23:59")
-    print(f"   - 🔄 Story generation: 2 stories every 30 minutes")
+    print(f"   - 🔄 Story generation: 2 stories every 20 minutes")
     
     # 可选：环境变量覆盖（用于测试）
     story_interval_minutes = os.getenv('STORY_GEN_INTERVAL_MINUTES')
@@ -122,7 +122,7 @@ def start_scheduler(app):
     if story_interval_minutes:
         # 使用分钟间隔（用于测试）
         interval_minutes = int(story_interval_minutes)
-        scheduler.remove_job('story_generation_30min')
+        scheduler.remove_job('story_generation_20min')
         scheduler.add_job(
             func=scheduled_story_generation,
             trigger='interval',
@@ -135,7 +135,7 @@ def start_scheduler(app):
     elif story_interval_hours:
         # 使用小时间隔
         interval_hours = int(story_interval_hours)
-        scheduler.remove_job('story_generation_30min')
+        scheduler.remove_job('story_generation_20min')
         scheduler.add_job(
             func=scheduled_story_generation,
             trigger='interval',
