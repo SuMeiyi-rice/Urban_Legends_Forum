@@ -79,6 +79,25 @@ function bindEvents() {
             if (e.target === storyModal) closeStoryModal();
         });
     }
+    
+    // 用户中心模态框点击外部关闭
+    const userCenterModal = document.getElementById('user-center-modal');
+    if (userCenterModal) {
+        userCenterModal.addEventListener('click', (e) => {
+            if (e.target === userCenterModal) {
+                closeUserCenterModal();
+            }
+        });
+    }
+}
+
+function closeUserCenterModal() {
+    const modal = document.getElementById('user-center-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        // 停止 Lila 摄像头
+        stopLilaCamera();
+    }
 }
 
 // 头部菜单栏事件处理
@@ -164,9 +183,400 @@ function renderStoriesFromList(stories) {
 }
 
 // 显示用户中心
+// 摄像头相关变量
+let cameraStream = null;
+let isCameraActive = false;
+let animationFrameId = null;
+let currentBrightness = 100;
+let currentContrast = 130;
+let filterEnabled = true;
+
+// Who's Lila Camera Logic
+let retroCameraStream = null;
+let retroCameraAnimationId = null;
+let lilaThreshold = 100;
+let lilaPalette = 'lila';
+
+const PROCESS_WIDTH = 160;
+const PROCESS_HEIGHT = 120;
+
+const lilaPalettes = {
+    lila: {
+        dark: [20, 5, 5],    // Deep dark red/black
+        light: [255, 50, 50] // Who's Lila Red
+    },
+    bw: {
+        dark: [10, 10, 10],
+        light: [230, 230, 230]
+    }
+};
+
+const bayerMatrix = [
+    [0, 8, 2, 10],
+    [12, 4, 14, 6],
+    [3, 11, 1, 9],
+    [15, 7, 13, 5]
+];
+
 function showUserCenter() {
-    showToast('👤 用户中心功能开发中...', 'info');
-    // TODO: 实现用户中心窗口
+    // 渲染并显示个人中心模态框
+    const modal = document.getElementById('user-center-modal');
+    const username = document.getElementById('uc-username');
+    const incept = document.getElementById('uc-incept');
+    const functionEl = document.getElementById('uc-function');
+    const rankEl = document.getElementById('uc-rank');
+    const categoriesEl = document.getElementById('uc-categories');
+    const profileTypeEl = document.getElementById('uc-profile-type');
+
+    if (currentUser) {
+        if (username) username.textContent = currentUser.username.toUpperCase().split('').join(' . ');
+        if (incept) {
+            const date = new Date(currentUser.created_at || Date.now());
+            incept.textContent = `${String(date.getMonth() + 1).padStart(2, '0')} / ${String(date.getDate()).padStart(2, '0')} / ${date.getFullYear()}`;
+        }
+        if (functionEl) functionEl.textContent = 'INVESTIGATOR';
+        if (rankEl) rankEl.textContent = 'CURIOUS';
+        
+        // 获取用户最感兴趣的分类
+        if (categoriesEl && token) {
+            fetch(API_BASE + '/user-top-categories', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.categories && data.categories.length > 0) {
+                    categoriesEl.innerHTML = data.categories.map(cat => {
+                        const categoryLabel = getCategoryLabel(cat.category);
+                        return '<span class="retro-interest-tag">' + categoryLabel + '</span>';
+                    }).join('');
+                    updateProfileType(data.categories);
+                } else {
+                    categoriesEl.innerHTML = '<span class="retro-interest-tag retro-no-data-tag">NO DATA</span>';
+                    updateProfileType([]);
+                }
+            })
+            .catch(err => {
+                console.error('Failed to load user categories:', err);
+                categoriesEl.innerHTML = '<span class="retro-interest-tag retro-no-data-tag">ERROR</span>';
+            });
+        }
+    } else {
+        if (username) username.textContent = 'GUEST';
+        if (incept) incept.textContent = '-- / -- / ----';
+        if (functionEl) functionEl.textContent = 'VISITOR';
+        if (rankEl) rankEl.textContent = 'UNKNOWN';
+        
+        // 访客状态
+        if (categoriesEl) {
+            categoriesEl.innerHTML = '<span class="retro-interest-tag retro-no-data-tag">NO DATA</span>';
+        }
+        updateProfileType([]);
+    }
+
+    if (modal) {
+        modal.style.display = 'flex';
+        // 初始化 Lila 摄像头控制
+        initLilaCameraControls();
+    }
+}
+
+function initLilaCameraControls() {
+    const startBtn = document.getElementById('startBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const thresholdRange = document.getElementById('thresholdRange');
+    
+    if (startBtn) {
+        // Clone to remove old listeners
+        const newStartBtn = startBtn.cloneNode(true);
+        startBtn.parentNode.replaceChild(newStartBtn, startBtn);
+        
+        newStartBtn.addEventListener('click', () => {
+            if (!retroCameraStream) {
+                startLilaCamera();
+            } else {
+                stopLilaCamera();
+            }
+        });
+    }
+    
+    if (captureBtn) {
+        const newCaptureBtn = captureBtn.cloneNode(true);
+        captureBtn.parentNode.replaceChild(newCaptureBtn, captureBtn);
+        
+        newCaptureBtn.addEventListener('click', captureLilaImage);
+    }
+    
+    if (thresholdRange) {
+        thresholdRange.addEventListener('input', (e) => {
+            lilaThreshold = parseInt(e.target.value);
+        });
+    }
+    
+    // Start clock
+    setInterval(() => {
+        const timestampEl = document.getElementById('lila-timestamp');
+        if (timestampEl) {
+            const now = new Date();
+            timestampEl.innerText = now.toLocaleTimeString('en-US', { hour12: false });
+        }
+    }, 1000);
+}
+
+window.setPalette = (mode) => {
+    lilaPalette = mode;
+};
+
+async function startLilaCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: "user" 
+            },
+            audio: false
+        });
+        
+        retroCameraStream = stream;
+        const video = document.getElementById('webcam');
+        const startBtn = document.getElementById('startBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const loadingText = document.getElementById('loadingText');
+        const outputCanvas = document.getElementById('outputCanvas');
+        
+        if (video) {
+            video.srcObject = stream;
+            await video.play();
+        }
+        
+        if (startBtn) {
+            startBtn.textContent = 'TERMINATE';
+            startBtn.style.background = 'rgba(255, 50, 50, 0.4)';
+        }
+        
+        if (captureBtn) captureBtn.disabled = false;
+        if (loadingText) loadingText.style.display = 'none';
+        
+        // Setup Canvas Resolution
+        if (outputCanvas) {
+            outputCanvas.width = PROCESS_WIDTH;
+            outputCanvas.height = PROCESS_HEIGHT;
+        }
+        
+        // Start Processing Loop
+        processLilaFrame();
+        
+    } catch (err) {
+        console.error("Error accessing webcam:", err);
+        const loadingText = document.getElementById('loadingText');
+        if (loadingText) {
+            loadingText.innerText = "ACCESS DENIED";
+            loadingText.classList.remove('lila-flicker-text');
+        }
+    }
+}
+
+function stopLilaCamera() {
+    if (retroCameraStream) {
+        retroCameraStream.getTracks().forEach(track => track.stop());
+        retroCameraStream = null;
+    }
+    
+    if (retroCameraAnimationId) {
+        cancelAnimationFrame(retroCameraAnimationId);
+        retroCameraAnimationId = null;
+    }
+    
+    const video = document.getElementById('webcam');
+    const startBtn = document.getElementById('startBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const loadingText = document.getElementById('loadingText');
+    const outputCanvas = document.getElementById('outputCanvas');
+    
+    if (video) {
+        video.srcObject = null;
+    }
+    
+    if (startBtn) {
+        startBtn.textContent = 'INITIALIZE';
+        startBtn.style.background = '';
+    }
+    
+    if (captureBtn) {
+        captureBtn.disabled = true;
+        captureBtn.innerText = "CAPTURE";
+        captureBtn.style.background = "rgba(80, 20, 20, 0.6)";
+        captureBtn.style.color = "var(--lila-red)";
+    }
+
+    if (loadingText) {
+        loadingText.style.display = 'flex';
+        loadingText.innerText = "[ WAITING FOR SIGNAL ]";
+        loadingText.classList.add('lila-flicker-text');
+    }
+    
+    // Clear canvas
+    if (outputCanvas) {
+        const ctx = outputCanvas.getContext('2d');
+        ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+    }
+}
+
+function processLilaFrame() {
+    if (!retroCameraStream) return;
+
+    const video = document.getElementById('webcam');
+    const outputCanvas = document.getElementById('outputCanvas');
+    
+    if (!video || !outputCanvas) return;
+    
+    const ctx = outputCanvas.getContext('2d');
+
+    // Draw video to canvas (scaled down)
+    ctx.drawImage(video, 0, 0, PROCESS_WIDTH, PROCESS_HEIGHT);
+
+    // Get raw pixel data
+    const imageData = ctx.getImageData(0, 0, PROCESS_WIDTH, PROCESS_HEIGHT);
+    const data = imageData.data;
+
+    // Apply Dithering Effect
+    const pal = lilaPalettes[lilaPalette];
+
+    for (let y = 0; y < PROCESS_HEIGHT; y++) {
+        for (let x = 0; x < PROCESS_WIDTH; x++) {
+            const index = (y * PROCESS_WIDTH + x) * 4;
+            
+            // Convert to Grayscale (standard luminance formula)
+            const r = data[index];
+            const g = data[index + 1];
+            const b = data[index + 2];
+            const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+            // Get Bayer Threshold (0-15) mapped to 0-255 range partially
+            const matrixValue = bayerMatrix[y % 4][x % 4];
+            const ditherOffset = (matrixValue - 7.5) * 8; 
+
+            // Decide pixel color
+            if (gray + ditherOffset > lilaThreshold) {
+                // Light Color
+                data[index] = pal.light[0];
+                data[index + 1] = pal.light[1];
+                data[index + 2] = pal.light[2];
+            } else {
+                // Dark Color
+                data[index] = pal.dark[0];
+                data[index + 1] = pal.dark[1];
+                data[index + 2] = pal.dark[2];
+            }
+            // Alpha is always 255
+            data[index + 3] = 255;
+        }
+    }
+
+    // Put processed pixels back
+    ctx.putImageData(imageData, 0, 0);
+
+    retroCameraAnimationId = requestAnimationFrame(processLilaFrame);
+}
+
+function captureLilaImage() {
+    const captureBtn = document.getElementById('captureBtn');
+    
+    // Check if we are currently running the camera loop (Live Mode)
+    if (retroCameraAnimationId) {
+        // === CAPTURE MODE ===
+        // Stop the processing loop to freeze the current frame
+        cancelAnimationFrame(retroCameraAnimationId);
+        retroCameraAnimationId = null;
+        
+        // Update UI to show "RETAKE" state
+        if (captureBtn) {
+            captureBtn.innerText = "RETAKE";
+            captureBtn.style.background = "rgba(200, 50, 50, 0.8)"; // Brighter red for active state
+            captureBtn.style.color = "#fff";
+        }
+        
+    } else {
+        // === RETAKE MODE ===
+        // Resume the processing loop
+        processLilaFrame();
+        
+        // Update UI back to "CAPTURE" state
+        if (captureBtn) {
+            captureBtn.innerText = "CAPTURE";
+            captureBtn.style.background = "rgba(80, 20, 20, 0.6)"; // Back to normal
+            captureBtn.style.color = "var(--lila-red)";
+        }
+    }
+}
+
+// 更新用户档案类型（根据兴趣分类）
+function updateProfileType(categories) {
+    const profileTypeEl = document.getElementById('uc-profile-type');
+    if (!profileTypeEl) return;
+    
+    if (!categories || categories.length === 0) {
+        profileTypeEl.textContent = 'ANALYZING...';
+        return;
+    }
+    
+    // 根据最感兴趣的分类定义用户类型
+    const profileTypes = {
+        'subway_ghost': 'URBAN EXPLORER',
+        'abandoned_building': 'RUIN HUNTER',
+        'cursed_object': 'ARTIFACT SEEKER',
+        'missing_person': 'INVESTIGATOR',
+        'time_anomaly': 'REALITY BENDER',
+        'campus_horror': 'STUDENT WITNESS',
+        'rental_mystery': 'TENANT SURVIVOR',
+        'night_taxi': 'NIGHT WANDERER',
+        'hospital_ward': 'MEDICAL ANOMALY',
+        'elevator_incident': 'VERTICAL TRAVELER',
+        'mirror_realm': 'REFLECTION WALKER',
+        'apartment_mystery': 'APARTMENT OBSERVER'
+    };
+    
+    const topCategory = categories[0].category;
+    const profileType = profileTypes[topCategory] || 'UNKNOWN ENTITY';
+    
+    profileTypeEl.textContent = profileType;
+}
+
+// 获取分类标签
+function getCategoryLabel(category) {
+    const categoryLabels = {
+        'subway_ghost': 'SUBWAY GHOST',
+        'abandoned_building': 'ABANDONED BUILDING',
+        'cursed_object': 'CURSED OBJECT',
+        'missing_person': 'MISSING PERSON',
+        'time_anomaly': 'TIME ANOMALY',
+        'campus_horror': 'CAMPUS HORROR',
+        'rental_mystery': 'RENTAL MYSTERY',
+        'night_taxi': 'NIGHT TAXI',
+        'hospital_ward': 'HOSPITAL WARD',
+        'elevator_incident': 'ELEVATOR INCIDENT',
+        'mirror_realm': 'MIRROR REALM',
+        'apartment_mystery': 'APARTMENT MYSTERY'
+    };
+    return categoryLabels[category] || category.toUpperCase();
+}
+
+// 追踪用户点击的分类
+async function trackCategoryClick(category) {
+    if (!token || !category) return;
+    
+    try {
+        await fetch(API_BASE + '/track-category-click', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ category: category })
+        });
+    } catch (error) {
+        console.error('Failed to track category click:', error);
+    }
 }
 
 // 通知中心逻辑在文件下方的异步实现处定义（避免重复）
@@ -692,6 +1102,11 @@ async function showStoryDetail(storyId) {
         
         const response = await fetch(API_BASE + '/stories/' + storyId);
         const story = await response.json();
+        
+        // 追踪用户点击的分类
+        if (currentUser && story.category && token) {
+            trackCategoryClick(story.category);
+        }
         
         // 调试信息
         console.log('📖 故事详情加载:', story.title);
