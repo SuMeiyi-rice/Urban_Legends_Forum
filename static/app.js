@@ -194,7 +194,7 @@ let filterEnabled = true;
 // Who's Lila Camera Logic
 let retroCameraStream = null;
 let retroCameraAnimationId = null;
-let lilaThreshold = 100;
+let lilaThreshold = 140;
 let lilaPalette = 'lila';
 
 const PROCESS_WIDTH = 160;
@@ -432,8 +432,11 @@ function processLilaFrame() {
     
     const ctx = outputCanvas.getContext('2d');
 
-    // Draw video to canvas (scaled down)
-    ctx.drawImage(video, 0, 0, PROCESS_WIDTH, PROCESS_HEIGHT);
+    // Draw video to canvas (scaled down) - Mirrored
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, -PROCESS_WIDTH, 0, PROCESS_WIDTH, PROCESS_HEIGHT);
+    ctx.restore();
 
     // Get raw pixel data
     const imageData = ctx.getImageData(0, 0, PROCESS_WIDTH, PROCESS_HEIGHT);
@@ -441,6 +444,11 @@ function processLilaFrame() {
 
     // Apply Dithering Effect
     const pal = lilaPalettes[lilaPalette];
+    
+    // Tracking variables
+    let sumX = 0;
+    let sumY = 0;
+    let pixelCount = 0;
 
     for (let y = 0; y < PROCESS_HEIGHT; y++) {
         for (let x = 0; x < PROCESS_WIDTH; x++) {
@@ -462,6 +470,11 @@ function processLilaFrame() {
                 data[index] = pal.light[0];
                 data[index + 1] = pal.light[1];
                 data[index + 2] = pal.light[2];
+                
+                // Accumulate for tracking
+                sumX += x;
+                sumY += y;
+                pixelCount++;
             } else {
                 // Dark Color
                 data[index] = pal.dark[0];
@@ -473,8 +486,25 @@ function processLilaFrame() {
         }
     }
 
+    // Update Head Position
+    if (pixelCount > 50) {
+        const targetX = sumX / pixelCount;
+        const targetY = sumY / pixelCount;
+        
+        // Invert X coordinate to match mirrored display
+        // If the user moves Left, the mirrored image moves Left (x decreases).
+        // But if the tracking feels opposite, we invert the target X.
+        const invertedTargetX = PROCESS_WIDTH - targetX;
+        
+        lilaHeadX += (invertedTargetX - lilaHeadX) * 0.15; // Smooth follow
+        lilaHeadY += (targetY - lilaHeadY) * 0.15;
+    }
+
     // Put processed pixels back
     ctx.putImageData(imageData, 0, 0);
+
+    // Lila Eye Effect
+    updateAndDrawEyes(ctx);
 
     retroCameraAnimationId = requestAnimationFrame(processLilaFrame);
 }
@@ -1579,4 +1609,165 @@ function updateClock() {
     const now = new Date().toLocaleTimeString('zh-CN', { hour12: false });
     const items = document.querySelectorAll('.menu-item');
     if (items.length > 0) items[0].textContent = now;
+}
+
+// ============================================
+// Lila Eye & Mouth Effect Logic
+// ============================================
+let lilaEyes = [];
+let lilaMouths = [];
+const MAX_EYES = 12;
+const MAX_MOUTHS = 2;
+let lilaHeadX = PROCESS_WIDTH / 2;
+let lilaHeadY = PROCESS_HEIGHT / 2;
+
+function updateAndDrawEyes(ctx) {
+    // === EYES ===
+    // Spawn logic - Increased rate and count
+    if (lilaEyes.length < MAX_EYES && Math.random() < 0.15) {
+        // Try to spawn multiple eyes at once
+        const spawnCount = Math.floor(Math.random() * 2) + 1;
+        
+        for(let k=0; k<spawnCount; k++) {
+            if (lilaEyes.length >= MAX_EYES) break;
+            
+            // Spawn relative to head position
+            // Range: +/- 40 pixels from center
+            const offsetX = (Math.random() - 0.5) * 80;
+            const offsetY = (Math.random() - 0.5) * 60 - 15; // Slightly higher bias (eyes area)
+
+            lilaEyes.push({
+                relX: offsetX,
+                relY: offsetY,
+                type: Math.random() > 0.7 ? 'large' : 'small',
+                life: 60 + Math.random() * 60,
+                blinkOffset: Math.random() * 1000
+            });
+        }
+    }
+
+    // Draw Eyes
+    for (let i = lilaEyes.length - 1; i >= 0; i--) {
+        let eye = lilaEyes[i];
+        eye.life--;
+        
+        if (eye.life <= 0) {
+            lilaEyes.splice(i, 1);
+            continue;
+        }
+
+        // Blink
+        const now = Date.now();
+        const blink = Math.sin((now + eye.blinkOffset) / 200) > 0.9;
+
+        if (!blink) {
+            // Calculate absolute position based on current head position
+            const drawX = lilaHeadX + eye.relX;
+            const drawY = lilaHeadY + eye.relY;
+            drawPixelEye(ctx, drawX, drawY, eye.type);
+        }
+    }
+
+    // === MOUTHS ===
+    // Spawn logic - Lower rate
+    if (lilaMouths.length < MAX_MOUTHS && Math.random() < 0.05) {
+        // Spawn relative to head position (Lower half)
+        // Shifted slightly left (-5) to center better
+        const offsetX = (Math.random() - 0.5) * 20 - 5; 
+        const offsetY = 35 + Math.random() * 20;    // Below center (mouth area) - Lowered
+
+        lilaMouths.push({
+            relX: offsetX,
+            relY: offsetY,
+            life: 80 + Math.random() * 60
+        });
+    }
+
+    // Draw Mouths
+    for (let i = lilaMouths.length - 1; i >= 0; i--) {
+        let mouth = lilaMouths[i];
+        mouth.life--;
+        
+        if (mouth.life <= 0) {
+            lilaMouths.splice(i, 1);
+            continue;
+        }
+
+        const drawX = lilaHeadX + mouth.relX;
+        const drawY = lilaHeadY + mouth.relY;
+        drawPixelMouth(ctx, drawX, drawY);
+    }
+}
+
+function drawPixelMouth(ctx, cx, cy) {
+    const C_WHITE = '#e0e0e0';
+    const C_BLACK = '#110505';
+    
+    // 2 = Black (Outline), 1 = White (Teeth), 0 = Transparent
+    const map = [
+        [2,0,0,0,0,0,0,0,0,0,0,0,0,0,2],
+        [2,2,0,0,0,0,0,0,0,0,0,0,0,2,2],
+        [2,1,2,2,2,2,2,2,2,2,2,2,2,1,2],
+        [0,2,1,1,2,1,1,2,1,1,2,1,1,2,0],
+        [0,2,1,1,2,1,1,2,1,1,2,1,1,2,0],
+        [0,0,2,1,1,2,2,2,2,2,1,1,2,0,0],
+        [0,0,0,2,2,1,1,1,1,1,2,2,0,0,0],
+        [0,0,0,0,0,2,2,2,2,2,0,0,0,0,0]
+    ];
+
+    const h = map.length;
+    const w = map[0].length;
+    const startX = Math.floor(cx - w/2);
+    const startY = Math.floor(cy - h/2);
+
+    for(let y=0; y<h; y++) {
+        for(let x=0; x<w; x++) {
+            const val = map[y][x];
+            if(val === 0) continue;
+            ctx.fillStyle = val === 1 ? C_WHITE : C_BLACK;
+            ctx.fillRect(startX + x, startY + y, 1, 1);
+        }
+    }
+}
+
+function drawPixelEye(ctx, cx, cy, type) {
+    const C_WHITE = '#e0e0e0';
+    const C_RED = '#ff3333';
+    const C_BLACK = '#110505';
+    
+    let map = [];
+    
+    if (type === 'small') {
+        map = [
+            [0,0,1,1,1,0,0],
+            [0,1,2,3,2,1,0],
+            [1,2,3,3,3,2,1],
+            [0,1,2,3,2,1,0],
+            [0,0,1,1,1,0,0]
+        ];
+    } else {
+        map = [
+            [0,0,0,1,1,1,1,1,0,0,0],
+            [0,1,1,2,2,2,2,2,1,1,0],
+            [1,1,2,2,3,3,3,2,2,1,1],
+            [1,2,2,3,3,3,3,3,2,2,1],
+            [1,1,2,2,3,3,3,2,2,1,1],
+            [0,1,1,2,2,2,2,2,1,1,0],
+            [0,0,0,1,1,1,1,1,0,0,0]
+        ];
+    }
+
+    const h = map.length;
+    const w = map[0].length;
+    const startX = Math.floor(cx - w/2);
+    const startY = Math.floor(cy - h/2);
+
+    for(let y=0; y<h; y++) {
+        for(let x=0; x<w; x++) {
+            const val = map[y][x];
+            if(val === 0) continue;
+            ctx.fillStyle = val === 1 ? C_WHITE : (val === 2 ? C_RED : C_BLACK);
+            ctx.fillRect(startX + x, startY + y, 1, 1);
+        }
+    }
 }

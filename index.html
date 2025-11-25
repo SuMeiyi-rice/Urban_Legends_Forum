@@ -1693,60 +1693,60 @@
 </div>
 
 <!-- 个人中心模态框 (Who's Lila Camera Interface) -->
-<div id="user-center-modal" class="modal-backdrop id-card-modal" style="display: none;">
+<div id="user-center-modal" class="modal-backdrop id-card-modal" style="display: none; align-items: center; justify-content: center;">
     <!-- 视觉特效层 -->
     <div class="retro-scanlines"></div>
     <div class="retro-crt-flicker"></div>
     <div class="retro-noise-layer"></div>
     
-    <div class="macos3-dialog" style="z-index: 10; position: relative;">
+    <div class="macos3-dialog" style="z-index: 10; position: relative; max-height: 95vh; overflow: hidden;">
         <div class="dialog-content" style="padding:0;">
             <div class="id-card">
-                <div class="retro-main-container" style="display: flex; gap: 20px; padding: 20px; background: #000; min-height: 600px;">
+                <div class="retro-main-container" style="display: flex; gap: 15px; padding: 15px; background: #000; height: auto; max-height: 85vh;">
                     
                     <!-- Left Column: Camera Interface -->
                     <div style="flex: 2; display: flex; flex-direction: column;">
                         <!-- Header -->
-                        <div style="margin-bottom: 20px; text-align: center;">
-                            <h1 class="lila-flicker-text" style="font-size: 32px; letter-spacing: 4px; color: var(--lila-red); margin: 0;">FACIAL RECOGNITION</h1>
-                            <p style="font-size: 12px; color: #522; margin-top: 5px;">DAEMON_V.1.0 // LOADING...</p>
+                        <div style="margin-bottom: 10px; text-align: center;">
+                            <h1 class="lila-flicker-text" style="font-size: 24px; letter-spacing: 4px; color: var(--lila-red); margin: 0;">FACIAL RECOGNITION</h1>
+                            <p style="font-size: 10px; color: #522; margin-top: 2px;">DAEMON_V.1.0 // LOADING...</p>
                         </div>
 
                         <!-- Camera Container -->
-                        <div class="lila-border" style="width: 100%; background: #000; flex: 1; display: flex; flex-direction: column;">
+                        <div class="lila-border" style="width: 100%; background: #000; flex: 1; display: flex; flex-direction: column; min-height: 0;">
                             <!-- Status Bar -->
-                            <div style="background: rgba(50,10,10,0.3); color: var(--lila-red); display: flex; justify-content: space-between; padding: 8px 12px; font-size: 14px; font-weight: bold; letter-spacing: 1px; border-bottom: 1px solid var(--lila-border);">
+                            <div style="background: rgba(50,10,10,0.3); color: var(--lila-red); display: flex; justify-content: space-between; padding: 5px 10px; font-size: 12px; font-weight: bold; letter-spacing: 1px; border-bottom: 1px solid var(--lila-border);">
                                 <span>REC ●</span>
                                 <span id="lila-timestamp">00:00:00</span>
                             </div>
 
                             <!-- Canvas Display -->
-                            <div style="position: relative; width: 100%; flex: 1; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 300px;">
+                            <div style="position: relative; width: 100%; flex: 1; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 200px;">
                                 <video id="webcam" autoplay playsinline class="hidden" style="display: none;"></video>
                                 <canvas id="outputCanvas" class="lila-canvas" style="width: 100%; height: 100%; object-fit: contain;"></canvas>
-                                <div id="loadingText" class="lila-flicker-text" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--lila-red); font-size: 24px; letter-spacing: 2px;">
+                                <div id="loadingText" class="lila-flicker-text" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--lila-red); font-size: 20px; letter-spacing: 2px;">
                                     CAMERA ACCESS DENIED
                                 </div>
                             </div>
 
                             <!-- Controls -->
-                            <div class="lila-controls" style="padding: 20px; border-top: 1px solid var(--lila-border);">
-                                <div style="display: flex; gap: 20px; align-items: flex-end;">
+                            <div class="lila-controls" style="padding: 10px; border-top: 1px solid var(--lila-border);">
+                                <div style="display: flex; gap: 10px; align-items: flex-end;">
                                     <div style="flex: 1;">
-                                        <label style="display: block; color: var(--lila-red); font-size: 12px; margin-bottom: 8px; font-weight: bold;">THRESHOLD (SENSITIVITY)</label>
-                                        <input type="range" id="thresholdRange" min="0" max="255" value="100" class="lila-range">
+                                        <label style="display: block; color: var(--lila-red); font-size: 10px; margin-bottom: 4px; font-weight: bold;">THRESHOLD</label>
+                                        <input type="range" id="thresholdRange" min="0" max="255" value="140" class="lila-range">
                                     </div>
-                                    <div style="width: 200px;">
-                                        <label style="display: block; color: var(--lila-red); font-size: 12px; margin-bottom: 8px; font-weight: bold;">PALETTE MODE</label>
+                                    <div style="width: 160px;">
+                                        <label style="display: block; color: var(--lila-red); font-size: 10px; margin-bottom: 4px; font-weight: bold;">PALETTE MODE</label>
                                         <div class="lila-btn-group">
-                                            <button onclick="setPalette('lila')" class="lila-btn-sm" style="padding: 8px; background: rgba(51, 17, 17, 0.6);">LILA RED</button>
-                                            <button onclick="setPalette('bw')" class="lila-btn-sm" style="padding: 8px; background: rgba(20, 30, 40, 0.6); color: #8899aa; border-color: #223344;">MONO</button>
+                                            <button onclick="setPalette('lila')" class="lila-btn-sm" style="padding: 4px 8px; font-size: 10px; background: rgba(51, 17, 17, 0.6);">LILA RED</button>
+                                            <button onclick="setPalette('bw')" class="lila-btn-sm" style="padding: 4px 8px; font-size: 10px; background: rgba(20, 30, 40, 0.6); color: #8899aa; border-color: #223344;">MONO</button>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="lila-btn-group" style="margin-top: 20px; justify-content: center; gap: 15px;">
-                                    <button id="startBtn" class="lila-btn-sm lila-btn-action" style="padding: 10px 30px; font-size: 16px; background: rgba(80, 20, 20, 0.6); border: 1px solid var(--lila-red);">INITIALIZE</button>
-                                    <button id="captureBtn" disabled class="lila-btn-sm lila-btn-action" style="padding: 10px 30px; font-size: 16px; background: rgba(80, 20, 20, 0.6); border: 1px solid var(--lila-red); color: var(--lila-red);">CAPTURE</button>
+                                <div class="lila-btn-group" style="margin-top: 10px; justify-content: center; gap: 10px;">
+                                    <button id="startBtn" class="lila-btn-sm lila-btn-action" style="padding: 6px 20px; font-size: 14px; background: rgba(80, 20, 20, 0.6); border: 1px solid var(--lila-red);">INITIALIZE</button>
+                                    <button id="captureBtn" disabled class="lila-btn-sm lila-btn-action" style="padding: 6px 20px; font-size: 14px; background: rgba(80, 20, 20, 0.6); border: 1px solid var(--lila-red); color: var(--lila-red);">CAPTURE</button>
                                 </div>
                             </div>
                         </div>
@@ -1756,38 +1756,38 @@
                     </div>
 
                     <!-- Right Column: Info & Tags -->
-                    <div style="flex: 1; display: flex; flex-direction: column; gap: 20px; max-width: 400px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 15px; max-width: 400px;">
                         
                         <!-- Spacer to align with Left Column Header (approx height of header + margin) -->
-                        <div style="height: 78px;"></div>
+                        <div style="height: 50px;"></div>
 
                         <!-- User Info Box -->
-                        <div class="lila-border" style="padding: 25px; background: #000; display: flex; flex-direction: column; gap: 18px;">
-                            <div class="retro-info-row" style="border-bottom: 1px dashed #311; padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 20px;">
-                                <span class="retro-info-label" style="color: #ff6666; font-size: 16px; letter-spacing: 1px;">NAME</span>
-                                <span id="uc-username" class="retro-info-value" style="font-size: 16px; letter-spacing: 2px;">UNKNOWN</span>
+                        <div class="lila-border" style="padding: 15px; background: #000; display: flex; flex-direction: column; gap: 12px;">
+                            <div class="retro-info-row" style="border-bottom: 1px dashed #311; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 15px;">
+                                <span class="retro-info-label" style="color: #ff6666; font-size: 14px; letter-spacing: 1px;">NAME</span>
+                                <span id="uc-username" class="retro-info-value" style="font-size: 14px; letter-spacing: 2px;">UNKNOWN</span>
                             </div>
-                            <div class="retro-info-row" style="border-bottom: 1px dashed #311; padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 20px;">
-                                <span class="retro-info-label" style="color: #ff6666; font-size: 16px; letter-spacing: 1px;">INCEPT DATE</span>
-                                <span id="uc-incept" class="retro-info-value" style="font-size: 16px; letter-spacing: 2px;">-- / -- / ----</span>
+                            <div class="retro-info-row" style="border-bottom: 1px dashed #311; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 15px;">
+                                <span class="retro-info-label" style="color: #ff6666; font-size: 14px; letter-spacing: 1px;">INCEPT DATE</span>
+                                <span id="uc-incept" class="retro-info-value" style="font-size: 14px; letter-spacing: 2px;">-- / -- / ----</span>
                             </div>
-                            <div class="retro-info-row" style="border-bottom: 1px dashed #311; padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 20px;">
-                                <span class="retro-info-label" style="color: #ff6666; font-size: 16px; letter-spacing: 1px;">FUNCTION</span>
-                                <span id="uc-function" class="retro-info-value" style="font-size: 16px; letter-spacing: 2px;">VISITOR</span>
+                            <div class="retro-info-row" style="border-bottom: 1px dashed #311; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 15px;">
+                                <span class="retro-info-label" style="color: #ff6666; font-size: 14px; letter-spacing: 1px;">FUNCTION</span>
+                                <span id="uc-function" class="retro-info-value" style="font-size: 14px; letter-spacing: 2px;">VISITOR</span>
                             </div>
-                            <div class="retro-info-row" style="border-bottom: 1px dashed #311; padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 20px;">
-                                <span class="retro-info-label" style="color: #ff6666; font-size: 16px; letter-spacing: 1px;">MENTAL STATE</span>
-                                <span id="uc-rank" class="retro-info-value retro-info-value-red" style="font-size: 16px; letter-spacing: 2px;">CURIOUS</span>
+                            <div class="retro-info-row" style="border-bottom: 1px dashed #311; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 15px;">
+                                <span class="retro-info-label" style="color: #ff6666; font-size: 14px; letter-spacing: 1px;">MENTAL STATE</span>
+                                <span id="uc-rank" class="retro-info-value retro-info-value-red" style="font-size: 14px; letter-spacing: 2px;">CURIOUS</span>
                             </div>
-                            <div class="retro-info-row" style="padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center; gap: 20px;">
-                                <span class="retro-info-label" style="color: #ff6666; font-size: 16px; letter-spacing: 1px;">LAST LOCATION</span>
-                                <span class="retro-info-value" style="font-size: 16px; letter-spacing: 2px;">--- --- ---</span>
+                            <div class="retro-info-row" style="padding-bottom: 2px; display: flex; justify-content: space-between; align-items: center; gap: 15px;">
+                                <span class="retro-info-label" style="color: #ff6666; font-size: 14px; letter-spacing: 1px;">LAST LOCATION</span>
+                                <span class="retro-info-value" style="font-size: 14px; letter-spacing: 2px;">--- --- ---</span>
                             </div>
                         </div>
 
                         <!-- Interest Profile Box -->
-                        <div class="lila-border" style="padding: 25px; background: #000; flex: 1; display: flex; flex-direction: column; gap: 15px;">
-                            <div class="retro-interest-title" style="background: transparent; color: #ff6666; border-bottom: 1px solid #311; padding: 0 0 10px 0; margin-bottom: 5px; font-size: 16px; letter-spacing: 1px;">INTEREST PROFILE</div>
+                        <div class="lila-border" style="padding: 15px; background: #000; flex: 1; display: flex; flex-direction: column; gap: 10px;">
+                            <div class="retro-interest-title" style="background: transparent; color: #ff6666; border-bottom: 1px solid #311; padding: 0 0 8px 0; margin-bottom: 4px; font-size: 14px; letter-spacing: 1px;">INTEREST PROFILE</div>
                             <div class="retro-interest-subtitle" style="color: #ff5555; font-size: 12px; margin-bottom: 10px;">TOP ACCESSED ARCHIVES</div>
                             
                             <div id="uc-categories" class="retro-interest-tags" style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-bottom: auto;">
