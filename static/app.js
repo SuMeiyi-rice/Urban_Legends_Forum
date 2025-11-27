@@ -119,11 +119,8 @@ function bindHeaderEvents() {
     const userMenu = document.getElementById('menu-user');
     if (userMenu) {
         userMenu.addEventListener('click', () => {
-            if (currentUser) {
-                showUserCenter();
-            } else {
-                showLoginForm();
-            }
+            // 始终打开用户中心；未登录则以访客模式显示
+            showUserCenter();
         });
     }
     
